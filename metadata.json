@@ -1,0 +1,8 @@
+
+{
+  "name": "IDS Sentinel",
+  "description": "A high-performance IoT Intrusion Detection System dashboard featuring real-time network topology mapping, AI-driven threat analysis, and detailed incident logging with a retro-industrial aesthetic.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
