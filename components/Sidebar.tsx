@@ -11,6 +11,31 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
+/** Intelli IPS brand cube SVG — matches the isometric cube logo */
+const IntelliLogo: React.FC<{ size?: number }> = ({ size = 28 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 256 256"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ flexShrink: 0 }}
+  >
+    {/* Top face */}
+    <polygon points="128,38 210,80 128,122 46,80" fill="#FFFFFF" stroke="#1a1a4e" strokeWidth="8" strokeLinejoin="round"/>
+    {/* Left face */}
+    <polygon points="46,80 128,122 128,216 46,174" fill="#F0F0F8" stroke="#1a1a4e" strokeWidth="8" strokeLinejoin="round"/>
+    {/* Right face */}
+    <polygon points="128,122 210,80 210,174 128,216" fill="#4A6FD4" stroke="#1a1a4e" strokeWidth="8" strokeLinejoin="round"/>
+    {/* Eye on top */}
+    <g transform="translate(128,80)">
+      <ellipse cx="0" cy="0" rx="28" ry="15" fill="#1a1a4e"/>
+      <ellipse cx="0" cy="0" rx="20" ry="9" fill="#FFFFFF"/>
+      {/* 4-point star spark */}
+      <polygon points="0,-7 2,-2 7,0 2,2 0,7 -2,2 -7,0 -2,-2" fill="#1a1a4e"/>
+    </g>
+  </svg>
+);
+
 const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onTabChange,
@@ -40,9 +65,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     <aside className="w-60 bg-background dark:bg-background-dark border-r border-surface dark:border-surface-highlight flex-col hidden md:flex z-20 shrink-0">
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-surface dark:border-surface-highlight gap-3 shrink-0">
-        <div className="size-7 bg-black dark:bg-white flex items-center justify-center text-white dark:text-black shadow-lg shrink-0">
-          <span className="material-symbols-outlined text-[17px] pixel-icon">security</span>
-        </div>
+        <IntelliLogo size={30} />
         <div>
           <h1 className="font-black text-sm tracking-tight uppercase text-main dark:text-white leading-none">Intelli IPS</h1>
           <p className="text-[10px] text-muted dark:text-gray-500 font-mono leading-none mt-0.5">Intrusion Prevention</p>

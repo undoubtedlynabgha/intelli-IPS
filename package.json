@@ -56,6 +56,10 @@
         "to": "build/icon.ico"
       },
       {
+        "from": "build/icon.png",
+        "to": "build/icon.png"
+      },
+      {
         "from": "backend/dist/ips_backend.exe",
         "to": "backend/ips_backend.exe"
       }
