@@ -27,6 +27,10 @@ SENSOR_BASELINES = {
     "lock": {"min": 0, "max": 1, "unit": "state"},
     "router": {"min": 0, "max": 1000, "unit": "Mbps"},
     "precision_manufacturing": {"min": 0.0, "max": 500.0, "unit": "RPM"},
+    "speaker": {"min": 0, "max": 100, "unit": "vol"},
+    "power": {"min": 0.0, "max": 3000.0, "unit": "W"},
+    "tv": {"min": 0, "max": 1, "unit": "state"},
+    "kitchen": {"min": -20.0, "max": 8.0, "unit": "°C"},
 }
 
 
@@ -39,7 +43,7 @@ def generate_normal_traffic(device: dict) -> list[TrafficPacket]:
     rate = device.get("normal_packet_rate", 3)
     # Add slight randomness to make it realistic (±30%)
     count = max(1, int(rate * random.uniform(0.7, 1.3)))
-    protocol = device.get("protocol", "HTTP")
+    protocol = device.get("protocol") or "HTTP"
     payload_min, payload_max = device.get("normal_payload_range", (20, 100))
 
     for _ in range(count):

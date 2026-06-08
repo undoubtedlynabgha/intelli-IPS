@@ -53,7 +53,7 @@ class DetectionMethod(str, Enum):
 class Device(BaseModel):
     id: str
     name: str
-    type: Literal["router", "videocam", "thermostat", "lock", "sensors", "lightbulb", "precision_manufacturing"]
+    type: Literal["router", "videocam", "thermostat", "lock", "sensors", "lightbulb", "precision_manufacturing", "speaker", "power", "tv", "kitchen"]
     ip: Optional[str] = None
     mac: Optional[str] = None
     status: DeviceStatus = DeviceStatus.ONLINE

@@ -26,12 +26,26 @@ async def start_simulation():
     if state["running"]:
         raise HTTPException(status_code=400, detail="Simulation is already running")
 
+    # Cancel any previously existing task cleanly before creating a new one.
+    # This is the key fix for the re-run bug: the old cancelled task may still
+    # exist as an object and was preventing baseline reset.
+    if state.get("sim_task") is not None:
+        old_task = state["sim_task"]
+        if not old_task.done():
+            old_task.cancel()
+            try:
+                import asyncio
+                await asyncio.shield(asyncio.wait_for(old_task, timeout=1.0))
+            except Exception:
+                pass
+        state["sim_task"] = None
+
+    # Always reset baseline so ML re-trains on fresh normal traffic each run
+    state["baseline_trained"] = False
+
     state["running"] = True
     import asyncio
     from main import simulation_loop
-    # Fresh ML baseline when (re)starting simulation
-    if state.get("sim_task") is None:
-        state["baseline_trained"] = False
     state["sim_task"] = asyncio.create_task(simulation_loop())
 
     return SimulationStatus(
@@ -57,6 +71,8 @@ async def stop_simulation():
     state["running"] = False
     # Stop any active attack
     state["attack_simulator"].stop_attack()
+    for dev_id in list(state["network"].devices.keys()):
+        state["network"].clear_device_threat(dev_id)
 
     # Cancel simulation task
     if state.get("sim_task"):
@@ -70,6 +86,53 @@ async def stop_simulation():
         total_attacks_injected=state["attack_simulator"].total_attacks_injected,
         active_attack=None,
     )
+
+
+# ──────────────────────────────────────────────
+# POST /simulation/reset
+# ──────────────────────────────────────────────
+@router.post("/reset")
+async def reset_simulation():
+    """
+    Fully reset the simulation: stop it, clear all state, reset network to defaults.
+    Use this to get a completely clean slate for a new simulation run.
+    """
+    state = get_app_state()
+
+    # Stop running simulation first
+    if state["running"]:
+        state["running"] = False
+        state["attack_simulator"].stop_attack()
+
+    if state.get("sim_task") is not None:
+        old_task = state["sim_task"]
+        if not old_task.done():
+            old_task.cancel()
+            try:
+                import asyncio
+                await asyncio.shield(asyncio.wait_for(old_task, timeout=1.0))
+            except Exception:
+                pass
+        state["sim_task"] = None
+
+    # Clear all accumulated data
+    state["alerts"].clear()
+    state["logs"].clear()
+    state["total_packets"] = 0
+    state["uptime"] = 0.0
+    state["pps"] = 0.0
+    state["traffic_chart"] = []
+    state["start_time"] = None
+    state["baseline_trained"] = False
+
+    # Reset all subsystems
+    state["detector"].reset()
+    state["mitigator"].reset()
+    state["network"].reset()
+    state["attack_simulator"].stop_attack()
+    state["attack_simulator"].total_attacks_injected = 0
+
+    return {"status": "simulation_reset", "message": "Simulation fully reset. Ready for a fresh run."}
 
 
 # ──────────────────────────────────────────────
@@ -96,7 +159,6 @@ async def trigger_attack(request: AttackRequest):
         if not target:
             raise HTTPException(status_code=404, detail=f"Device {request.target_device_id} not found")
     else:
-        # Pick a random active device as target
         import random
         active = state["network"].get_active_devices()
         if active:
@@ -110,11 +172,15 @@ async def trigger_attack(request: AttackRequest):
             raise HTTPException(status_code=404, detail=f"Attacker device {request.attacker_device_id} not found")
 
     state["attack_simulator"].start_attack(
-        request.attack_type, 
-        target_device=target, 
-        attacker_device=attacker, 
+        request.attack_type,
+        target_device=target,
+        attacker_device=attacker,
         custom_packet_rate=request.packet_rate
     )
+    if target:
+        state["network"].set_device_threat(target["id"])
+    if attacker:
+        state["network"].set_device_threat(attacker["id"])
 
     from config import ATTACK_CONFIGS
     config = ATTACK_CONFIGS.get(request.attack_type.value, {})
@@ -137,6 +203,8 @@ async def stop_attack():
     """Manually stop the active attack."""
     state = get_app_state()
     state["attack_simulator"].stop_attack()
+    for dev_id in list(state["network"].devices.keys()):
+        state["network"].clear_device_threat(dev_id)
     return {"status": "attack_stopped"}
 
 

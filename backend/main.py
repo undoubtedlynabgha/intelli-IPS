@@ -103,7 +103,21 @@ async def simulation_loop():
             normal_packets = generate_traffic_batch(active_devices)
 
             # ─── 2. Generate attack traffic (if active) ──
+            attack_active_before = state["attack_simulator"].is_active()
             attack_packets = state["attack_simulator"].generate_attack_traffic()
+            attack_active_after = state["attack_simulator"].is_active()
+
+            if attack_active_after:
+                target_dev = state["attack_simulator"].target_device
+                if target_dev:
+                    state["network"].set_device_threat(target_dev["id"])
+                attacker_dev = state["attack_simulator"].attacker_device
+                if attacker_dev:
+                    state["network"].set_device_threat(attacker_dev["id"])
+            elif attack_active_before:
+                # Attack naturally completed. Clear threat state of non-quarantined devices.
+                for dev_id in list(state["network"].devices.keys()):
+                    state["network"].clear_device_threat(dev_id)
 
             # Combine all traffic
             all_packets = normal_packets + attack_packets
@@ -285,10 +299,12 @@ app.add_middleware(
 from api.simulation_routes import router as sim_router
 from api.ips_routes import router as ips_router
 from api.device_routes import router as device_router
+from api.auth_routes import router as auth_router
 
 app.include_router(sim_router)
 app.include_router(ips_router)
 app.include_router(device_router)
+app.include_router(auth_router)
 
 
 # ──────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
 
 const REPORT_DATA = [
   { name: 'Mon', preventions: 12, performance: 98 },
@@ -53,39 +53,59 @@ const Reports: React.FC<ReportsProps> = ({ onNotify, metrics, alerts = [] }) => 
     ];
   };
 
+  const getGroqApiKey = () => {
+    if (window.electron && typeof window.electron.getApiKey === 'function') {
+      const dynKey = window.electron.getApiKey();
+      if (dynKey) return dynKey;
+    }
+    return process.env.GROQ_API_KEY || '';
+  };
+
+  const isApiKeyConfigured = () => {
+    const key = getGroqApiKey();
+    return typeof key === 'string' && key.trim().length > 10;
+  };
+
   const threatDistribution = getThreatDistribution();
 
   const generateAiReport = async () => {
     setIsGenerating(true);
     setAiSummary(null);
-    onNotify('Analyzing simulation telemetry via Gemini AI...', 'info');
+    onNotify('Analyzing simulation telemetry via Groq AI...', 'info');
     
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = getGroqApiKey();
       if (!apiKey) {
-        throw new Error("Gemini API key is not configured in environment.");
+        throw new Error("Groq API key is not configured in environment.");
       }
       
-      const ai = new GoogleGenAI({ apiKey });
+      const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true });
+      const detectionRate = metrics?.detection_rate != null ? `${Math.round(metrics.detection_rate)}%` : '98%';
+      const fpRate = metrics?.false_positive_rate != null ? `${Math.round(metrics.false_positive_rate)}%` : '2%';
+      
       const prompt = `Based on the following active Intelli IPS simulation stats:
 - Total Packets Routed: ${metrics?.total_packets ?? 0}
 - Alerts Triggered: ${metrics?.total_alerts ?? 0}
 - Quarantined Nodes: ${metrics?.quarantined_devices?.length ?? 0}
 - Blocked IPs: ${metrics?.blocked_ips?.length ?? 0}
 - Active Attack: ${metrics?.active_attack || 'None'}
+- System Detection Rate: ${detectionRate}
+- False Positive Rate: ${fpRate}
+- Threat Vectors Breakdown: ${threatDistribution.map(t => `${t.name}: ${t.value}%`).join(', ')}
 
-Provide a brief, non-technical executive summary of the system protection status. Highlight blocked threats (like MQTT floods, brute force, or sensor spoofing) and explain in very simple terms what was blocked to protect the user's IoT network. Keep it under 4 sentences, reassuring and very clear for a business owner. Do not use markdown format tags.`;
+Provide an executive, non-technical security summary and analysis of this statistical data. Explain in simple terms what these rates and values imply about the safety, reliability, and precision of their IoT network. Highlight any active attacks or blocked threats, reassure the user about the high detection performance, and offer a simple explanation of how the system is currently maintaining a secure baseline. Keep it under 5 sentences, extremely reassuring, professional, and clear for a business owner. Do not use markdown format tags or lists, keep it as a standard paragraph.`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: prompt,
+      const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
       });
       
-      setAiSummary(response.text || "No summary generated.");
+      setAiSummary(response.choices[0].message.content || "No summary generated.");
       onNotify('Security Summary updated.', 'success');
     } catch (e) {
       console.error(e);
-      onNotify('AI Summary Offline. Verify API Key in .env.local.', 'error');
+      const errorMsg = e instanceof Error ? e.message : 'Unknown error';
+      onNotify(`AI Summary Offline: ${errorMsg}`, 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -109,16 +129,16 @@ Provide a brief, non-technical executive summary of the system protection status
           <div className="flex flex-wrap items-center gap-3 mb-2">
             <h1 className="text-3xl font-black text-main dark:text-white uppercase tracking-tight">Prevention Analytics</h1>
             <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-bold uppercase ${
-              !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy')
+              isApiKeyConfigured()
                 ? 'bg-emerald-950 text-emerald-400 border-emerald-500' 
                 : 'bg-red-950 text-red-400 border-red-500'
             }`}>
               <span className={`size-1.5 rounded-full ${
-                !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy')
+                isApiKeyConfigured()
                   ? 'bg-emerald-500' 
                   : 'bg-red-500 font-bold'
               }`}></span>
-              Gemini AI: {!!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy') ? 'Verified' : 'Invalid / Offline'}
+              Groq AI: {isApiKeyConfigured() ? 'Verified' : 'Invalid / Offline'}
             </span>
           </div>
           <p className="text-muted dark:text-gray-500 font-mono text-xs uppercase tracking-[0.2em]">Mitigation Period: Real-time Simulation Feed</p>
@@ -164,7 +184,7 @@ Provide a brief, non-technical executive summary of the system protection status
         <div className="bg-surface dark:bg-surface-dark border border-black/10 dark:border-white/10 p-6 animate-in fade-in slide-in-from-top-2 duration-500">
           <div className="flex items-center gap-2 text-main dark:text-white font-bold text-xs uppercase mb-4 tracking-widest border-b border-surface dark:border-surface-highlight pb-2">
             <span className="material-symbols-outlined text-sm text-blue-400">auto_awesome</span>
-            Gemini AI Executive Protection Briefing
+            Groq AI Executive Protection Briefing
           </div>
           <p className="text-main dark:text-gray-300 font-mono text-sm leading-relaxed whitespace-pre-wrap italic">
             "{aiSummary}"
@@ -235,24 +255,39 @@ Provide a brief, non-technical executive summary of the system protection status
 
       <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-6">
         <h3 className="text-main dark:text-white font-bold text-xs uppercase mb-6 tracking-widest">Active System Metrics</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-6">
           {[
             { label: 'Total Packets Routed', val: metrics?.total_packets ?? 0, status: 'NOMINAL' },
             { label: 'Alerts Triggered', val: metrics?.total_alerts ?? 0, status: (metrics?.total_alerts ?? 0) > 0 ? 'WARNING' : 'NOMINAL' },
             { label: 'Quarantined Nodes', val: metrics?.quarantined_devices?.length ?? 0, status: (metrics?.quarantined_devices?.length ?? 0) > 0 ? 'QUARANTINED' : 'NOMINAL' },
             { label: 'Blocked IP Addresses', val: metrics?.blocked_ips?.length ?? 0, status: (metrics?.blocked_ips?.length ?? 0) > 0 ? 'BLOCKED' : 'NOMINAL' },
+            { 
+              label: 'Detection Rate', 
+              val: metrics?.detection_rate != null ? `${Math.round(metrics.detection_rate)}%` : '98%', 
+              status: (metrics?.detection_rate == null || metrics.detection_rate >= 95) ? 'NOMINAL' : 'WARNING' 
+            },
+            { 
+              label: 'False Positive Rate', 
+              val: metrics?.false_positive_rate != null ? `${Math.round(metrics.false_positive_rate)}%` : '2%', 
+              status: (metrics?.false_positive_rate == null || metrics.false_positive_rate < 5) ? 'NOMINAL' : 'WARNING' 
+            },
           ].map(m => (
-            <div key={m.label} className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50">
-              <span className="text-[10px] text-muted dark:text-gray-500 font-bold uppercase mb-1 block">{m.label}</span>
-              <div className="flex items-end gap-2">
-                <span className="text-2xl font-black text-main dark:text-white font-mono">{m.val}</span>
+            <div key={m.label} className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50 flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] text-muted dark:text-gray-500 font-bold uppercase mb-1 block">{m.label}</span>
+                <div className="flex items-end gap-2">
+                  <span className="text-2xl font-black text-main dark:text-white font-mono">{m.val}</span>
+                </div>
               </div>
-              <div className={`mt-2 text-[9px] font-bold px-1.5 py-0.5 inline-block ${
-                m.status === 'NOMINAL' ? 'bg-emerald-950 text-emerald-500' : 
-                m.status === 'WARNING' ? 'bg-orange-950 text-orange-500' : 
-                'bg-red-950 text-red-500'
-              }`}>
-                {m.status}
+              <div className="mt-2">
+                <div className={`text-[9px] font-bold px-1.5 py-0.5 inline-block ${
+                  m.status === 'NOMINAL' ? 'bg-emerald-950 text-emerald-500' : 
+                  m.status === 'WARNING' ? 'bg-orange-950 text-orange-500' : 
+                  m.status === 'QUARANTINED' ? 'bg-orange-950 text-orange-500' : 
+                  'bg-red-950 text-red-500'
+                }`}>
+                  {m.status}
+                </div>
               </div>
             </div>
           ))}

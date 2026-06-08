@@ -85,7 +85,7 @@ async def allow_device(device_id: str, allowed: bool):
             message=f"Device {dev['name']} ({device_id}) blocked: removed from Whitelist.",
             status="BLOCKED"
         ))
-    elif allowed and dev["status"] == "blocked" and "QUARANTINED" in (dev.get("details") or ""):
+    elif allowed and dev["status"] == "blocked":
         # If the user allowed a quarantined device, unblock it
         state["network"].unquarantine_device(device_id)
         if dev.get("ip"):
@@ -134,4 +134,27 @@ async def unblock_device(device_id: str):
     state["network"].unquarantine_device(device_id)
     if dev.get("ip"):
         state["network"].unblock_ip(dev["ip"])
+    # Ensure allowed is set to True so it isn't immediately re-quarantined
+    dev["allowed"] = True
     return {"status": "unblocked", "device_id": device_id}
+
+
+# ──────────────────────────────────────────────
+# DELETE /devices/{device_id}
+# ──────────────────────────────────────────────
+@router.delete("/{device_id}")
+async def delete_device(device_id: str):
+    """Decommission / remove an IoT device from the network."""
+    state = get_app_state()
+    dev = state["network"].get_device(device_id)
+    if not dev:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    if dev.get("type") == "router" or device_id == "GW_01":
+        raise HTTPException(status_code=400, detail="Cannot decommission the central Network Gateway hub")
+
+    success = state["network"].remove_device(device_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to decommission device")
+
+    return {"status": "success", "message": f"Device {device_id} decommissioned successfully"}

@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
     
     // Get API key from environment, with fallback
-    const apiKey = env.GEMINI_API_KEY || env.API_KEY || '';
+    const apiKey = env.GROQ_API_KEY || env.API_KEY || '';
     
     return {
       base: './',
@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(apiKey),
-        'process.env.GEMINI_API_KEY': JSON.stringify(apiKey)
+        'process.env.GROQ_API_KEY': JSON.stringify(apiKey)
       },
       resolve: {
         alias: {

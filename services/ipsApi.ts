@@ -99,6 +99,9 @@ export const ipsApi = {
   stopSimulation: () =>
     request<SimulationStatus>('/simulation/stop', { method: 'POST' }),
 
+  resetSimulation: () =>
+    request<{ status: string; message: string }>('/simulation/reset', { method: 'POST' }),
+
   getSimulationStatus: () => request<SimulationStatus>('/simulation/status'),
 
   triggerAttack: (attack_type: AttackType, target_device_id?: string, attacker_device_id?: string, packet_rate?: number) =>
@@ -135,6 +138,11 @@ export const ipsApi = {
     request<Device>('/devices/', {
       method: 'POST',
       body: JSON.stringify(device),
+    }),
+
+  removeDevice: (deviceId: string) =>
+    request<{ status: string; message: string }>(`/devices/${deviceId}`, {
+      method: 'DELETE',
     }),
 };
 

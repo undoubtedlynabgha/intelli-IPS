@@ -119,6 +119,28 @@ export function useIpsBackend() {
     };
   }, [refresh, scheduleReconnect, clearReconnect, clearPoll]);
 
+  // Listen for Electron main process signaling that the backend is ready.
+  // This short-circuits the exponential backoff and triggers an immediate check.
+  useEffect(() => {
+    const win = window as any;
+    if (win.electron && typeof win.electron.onBackendReady === 'function') {
+      win.electron.onBackendReady(async () => {
+        if (!mountedRef.current) return;
+        clearReconnect();
+        const ok = await isBackendAvailable();
+        if (!mountedRef.current) return;
+        if (ok) {
+          setConnected(true);
+          setLoading(false);
+          await refresh();
+        } else {
+          scheduleReconnect();
+        }
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Polling when connected
   useEffect(() => {
     if (!connected) {
@@ -157,6 +179,8 @@ export function useIpsBackend() {
   const devices: Device[] = metrics?.devices ?? [];
 
   const startSimulation = async () => {
+    // Always reset first so the simulation can run cleanly a second time
+    try { await ipsApi.resetSimulation(); } catch { /* ignore if already stopped */ }
     const s = await ipsApi.startSimulation();
     setSimStatus(s);
     await refresh();
@@ -168,6 +192,17 @@ export function useIpsBackend() {
     setSimStatus(s);
     await refresh();
     return s;
+  };
+
+  const resetSimulation = async () => {
+    const r = await ipsApi.resetSimulation();
+    setSimStatus(null);
+    setMetrics(null);
+    setAlerts([]);
+    setLogs([]);
+    setTrafficChart([]);
+    await refresh();
+    return r;
   };
 
   const triggerAttack = async (
@@ -193,6 +228,7 @@ export function useIpsBackend() {
     refresh,
     startSimulation,
     stopSimulation,
+    resetSimulation,
     triggerAttack,
     ipsApi,
   };

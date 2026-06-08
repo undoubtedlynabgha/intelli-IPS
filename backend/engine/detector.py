@@ -37,6 +37,9 @@ class DetectionEngine:
         self._packet_counts: dict[str, deque] = defaultdict(lambda: deque(maxlen=200))
         self._auth_attempts: dict[str, list[float]] = defaultdict(list)
         self._sensor_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=50))
+        
+        # Pre-populate sensor history for default devices to avoid cold start issues
+        self._prepopulate_history()
 
         # Statistics
         self.total_inspected: int = 0
@@ -282,4 +285,26 @@ class DetectionEngine:
         self.false_positives = 0
         self.total_malicious = 0
         self.ml_detector.reset()
+        self._prepopulate_history()
         logger.info("Detection engine reset")
+
+    def _prepopulate_history(self):
+        """Pre-populate sensor history for default devices to avoid cold start issues."""
+        try:
+            from config import DEFAULT_DEVICES
+            from simulation.traffic import SENSOR_BASELINES
+            import random
+            for dev in DEFAULT_DEVICES:
+                dev_id = dev["id"]
+                dev_type = dev["type"]
+                baseline = SENSOR_BASELINES.get(dev_type)
+                if baseline:
+                    # Generate 15 normal sample values
+                    center = (baseline["min"] + baseline["max"]) / 2
+                    spread = (baseline["max"] - baseline["min"]) / 4
+                    for _ in range(15):
+                        val = round(random.gauss(center, spread), 2)
+                        val = max(baseline["min"] * 0.8, min(baseline["max"] * 1.2, val))
+                        self._sensor_history[dev_id].append(val)
+        except Exception as e:
+            logger.error(f"Error pre-populating sensor history: {e}")

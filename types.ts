@@ -10,7 +10,7 @@ export enum RiskLevel {
 export interface Device {
   id: string;
   name: string;
-  type: 'router' | 'videocam' | 'thermostat' | 'lock' | 'sensors' | 'lightbulb' | 'precision_manufacturing';
+  type: 'router' | 'videocam' | 'thermostat' | 'lock' | 'sensors' | 'lightbulb' | 'precision_manufacturing' | 'speaker' | 'power' | 'tv' | 'kitchen';
   ip?: string;
   mac?: string;
   status: 'online' | 'offline' | 'threat' | 'blocked';

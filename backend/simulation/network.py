@@ -129,6 +129,17 @@ class IoTNetwork:
         """Commission a new device into the network."""
         device_data["status"] = "online"
         device_data["allowed"] = device_data.get("allowed", True)
+        
+        # Auto-assign default protocol based on device type if not provided/None
+        if not device_data.get("protocol"):
+            dev_type = device_data.get("type", "sensors")
+            if dev_type in ["sensors", "thermostat", "precision_manufacturing", "power"]:
+                device_data["protocol"] = "MQTT"
+            elif dev_type in ["lock", "lightbulb", "speaker"]:
+                device_data["protocol"] = "CoAP"
+            else:
+                device_data["protocol"] = "HTTP"
+
         self.devices[device_data["id"]] = {
             **device_data,
             "normal_packet_rate": 3,
@@ -136,6 +147,17 @@ class IoTNetwork:
         }
         logger.info(f"New device commissioned: {device_data['id']}")
         return Device(**device_data)
+
+    def remove_device(self, device_id: str) -> bool:
+        """Decommission a device from the network."""
+        if device_id in self.devices:
+            dev = self.devices.pop(device_id)
+            self.quarantined_devices.discard(device_id)
+            if dev.get("ip"):
+                self.unblock_ip(dev["ip"])
+            logger.info(f"Device decommissioned: {device_id}")
+            return True
+        return False
 
     def reset(self):
         """Reset network to initial state."""

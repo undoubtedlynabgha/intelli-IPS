@@ -15,40 +15,52 @@ MAX_TRAFFIC_HISTORY = 500       # max packets kept in memory for analysis
 # ──────────────────────────────────────────────
 DEFAULT_DEVICES = [
     {
-        "id": "GW_01", "name": "IoT_Gateway_Main", "type": "router",
+        "id": "GW_01", "name": "Smart_Home_Hub", "type": "router",
         "ip": "192.168.1.1", "mac": "AA:BB:CC:00:01:01",
         "protocol": "HTTP", "status": "online",
         "normal_packet_rate": 10, "normal_payload_range": (50, 200),
     },
     {
-        "id": "CAM_04", "name": "CAM_EXT_04", "type": "videocam",
+        "id": "CAM_04", "name": "Front_Door_Camera", "type": "videocam",
         "ip": "192.168.1.105", "mac": "AA:BB:CC:00:04:05",
         "protocol": "HTTP", "status": "online",
         "normal_packet_rate": 8, "normal_payload_range": (200, 800),
     },
     {
-        "id": "HVAC_01", "name": "HVAC_Main", "type": "thermostat",
-        "ip": "10.0.0.55", "mac": "AA:BB:CC:00:55:01",
+        "id": "HVAC_01", "name": "Living_Room_Thermostat", "type": "thermostat",
+        "ip": "192.168.1.55", "mac": "AA:BB:CC:00:55:01",
         "protocol": "MQTT", "status": "online",
         "normal_packet_rate": 3, "normal_payload_range": (20, 60),
     },
     {
-        "id": "DOOR_01", "name": "Door_Rear", "type": "lock",
+        "id": "DOOR_01", "name": "Front_Door_Lock", "type": "lock",
         "ip": "192.168.1.80", "mac": "AA:BB:CC:00:80:01",
         "protocol": "CoAP", "status": "online",
         "normal_packet_rate": 2, "normal_payload_range": (10, 30),
     },
     {
-        "id": "SENS_A", "name": "Sensor_Cluster_A", "type": "sensors",
+        "id": "SENS_A", "name": "Kitchen_Smoke_Detector", "type": "sensors",
         "ip": "192.168.1.200", "mac": "AA:BB:CC:02:00:0A",
         "protocol": "MQTT", "status": "online",
         "normal_packet_rate": 6, "normal_payload_range": (15, 50),
     },
     {
-        "id": "LGHT_01", "name": "Light_Grid_01", "type": "lightbulb",
+        "id": "LGHT_01", "name": "Bedroom_Smart_Light", "type": "lightbulb",
         "ip": "192.168.1.50", "mac": "AA:BB:CC:00:50:01",
         "protocol": "CoAP", "status": "online",
         "normal_packet_rate": 2, "normal_payload_range": (5, 20),
+    },
+    {
+        "id": "SPK_01", "name": "Living_Room_Speaker", "type": "speaker",
+        "ip": "192.168.1.120", "mac": "AA:BB:CC:00:20:01",
+        "protocol": "CoAP", "status": "online",
+        "normal_packet_rate": 3, "normal_payload_range": (15, 45),
+    },
+    {
+        "id": "PLG_01", "name": "Coffee_Maker_Plug", "type": "power",
+        "ip": "192.168.1.75", "mac": "AA:BB:CC:00:75:01",
+        "protocol": "MQTT", "status": "online",
+        "normal_packet_rate": 4, "normal_payload_range": (10, 35),
     },
 ]
 
@@ -114,3 +126,85 @@ ATTACK_CONFIGS = {
 API_HOST = "0.0.0.0"
 API_PORT = 8000
 CORS_ORIGINS = ["*"]  # Allow all for dev — restrict in production
+
+# ──────────────────────────────────────────────
+# User authentication handling (hashed passwords)
+# ──────────────────────────────────────────────
+import json, hashlib, os, sys
+from typing import List, Dict, Optional
+
+def _resolve_userdata_dir() -> str:
+    """
+    Return a writable directory for persistent data (users.json, etc.).
+    Priority:
+      1. IPS_USERDATA env var (set by Electron main.js when launching the exe)
+      2. When frozen by PyInstaller: %APPDATA%\\Intelli IPS\\
+      3. Development: directory next to this config.py file
+    """
+    env_path = os.environ.get("IPS_USERDATA", "").strip()
+    if env_path and os.path.isdir(env_path):
+        return env_path
+
+    if getattr(sys, "frozen", False):
+        # Packaged — use Windows APPDATA or fall back to exe directory
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            target = os.path.join(appdata, "Intelli IPS")
+        else:
+            target = os.path.dirname(sys.executable)
+        os.makedirs(target, exist_ok=True)
+        return target
+
+    # Development mode
+    return os.path.dirname(__file__)
+
+USER_DB_PATH = os.path.join(_resolve_userdata_dir(), "users.json")
+
+class UserStore:
+    """Simple file‑based user store with SHA‑256 password hashing."""
+    def __init__(self, path: str = USER_DB_PATH):
+        self.path = path
+        if not os.path.exists(self.path):
+            # Initialise with a default admin user (password: admin)
+            default_admin = {
+                "username": "admin",
+                "password_hash": hashlib.sha256("admin".encode()).hexdigest(),
+                "role": "admin",
+            }
+            with open(self.path, "w", encoding="utf-8") as f:
+                json.dump([default_admin], f, indent=2)
+
+    def _load_users(self) -> List[Dict]:
+        with open(self.path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _save_users(self, users: List[Dict]):
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2)
+
+    def get_user(self, username: str) -> Optional[Dict]:
+        for u in self._load_users():
+            if u.get("username") == username:
+                return u
+        return None
+
+    def verify_credentials(self, username: str, password: str) -> bool:
+        user = self.get_user(username)
+        if not user:
+            return False
+        return user.get("password_hash") == hashlib.sha256(password.encode()).hexdigest()
+
+    def add_user(self, username: str, password: str, role: str = "user") -> bool:
+        if self.get_user(username):
+            return False
+        users = self._load_users()
+        users.append({
+            "username": username,
+            "password_hash": hashlib.sha256(password.encode()).hexdigest(),
+            "role": role,
+        })
+        self._save_users(users)
+        return True
+
+def get_user_store() -> UserStore:
+    return UserStore()
