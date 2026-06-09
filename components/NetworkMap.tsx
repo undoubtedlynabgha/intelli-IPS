@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Device } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
-import { AttackType } from '../services/ipsApi';
+import { AttackType, ipsApi } from '../services/ipsApi';
 
 interface NetworkMapProps {
   isScanning?: boolean;
@@ -65,6 +65,44 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
   const [addDeviceType, setAddDeviceType] = useState('sensors');
   const [addDeviceIp, setAddDeviceIp] = useState(`192.168.1.${Math.floor(Math.random() * 150) + 100}`);
   const [addDeviceAllowed, setAddDeviceAllowed] = useState(true);
+
+  const [selectedScenario, setSelectedScenario] = useState('ddos_gateway');
+  const [runningScenario, setRunningScenario] = useState(false);
+
+  const handleRunScenario = async () => {
+    setRunningScenario(true);
+    onNotify(`Loading scenario: ${selectedScenario}...`, 'info');
+    try {
+      await ipsApi.runScenario(selectedScenario);
+      onNotify(`Scenario '${selectedScenario}' initiated. Training baseline...`, 'success');
+    } catch (e) {
+      onNotify(e instanceof Error ? e.message : 'Failed to launch scenario', 'error');
+    } finally {
+      setRunningScenario(false);
+    }
+  };
+
+  const handleTraceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (!Array.isArray(json)) {
+          onNotify('Invalid trace format: must be a JSON array of packets', 'error');
+          return;
+        }
+        onNotify(`Replaying trace: uploading ${json.length} packets...`, 'info');
+        await ipsApi.uploadTrace(json);
+        onNotify(`Trace replay initiated in backend. Check Event Streams!`, 'success');
+      } catch (err) {
+        onNotify('Failed to parse JSON file', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Draggable panel state
   const [panelPos, setPanelPos] = useState({ x: 16, y: 16 });
@@ -443,6 +481,36 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                         stroke={strokeColor} strokeDasharray={strokeDash} strokeWidth={strokeWidth} />
                     );
                   })}
+                  
+                  {/* SVG Packet Flow Animations */}
+                  {simulationRunning && meshLinks.map(link => {
+                    if (link.status === 'blocked') return null;
+                    let particleColor = theme === 'dark' ? '#10b981' : '#059669';
+                    let dur = '3.0s';
+                    
+                    if (link.status === 'threat') {
+                      particleColor = '#ef4444';
+                      dur = '0.7s';
+                    } else if (!link.isGateway) {
+                      particleColor = theme === 'dark' ? '#3b82f6' : '#2563eb';
+                      dur = '4.0s';
+                    }
+                    
+                    const halfDur = (parseFloat(dur) / 2) + 's';
+                    
+                    return (
+                      <g key={`particles-${link.id}`}>
+                        <circle r="3" fill={particleColor} opacity="0.8">
+                          <animate attributeName="cx" from={link.x2} to={link.x1} dur={dur} begin="0s" repeatCount="indefinite" />
+                          <animate attributeName="cy" from={link.y2} to={link.y1} dur={dur} begin="0s" repeatCount="indefinite" />
+                        </circle>
+                        <circle r="3" fill={particleColor} opacity="0.8">
+                          <animate attributeName="cx" from={link.x2} to={link.x1} dur={dur} begin={halfDur} repeatCount="indefinite" />
+                          <animate attributeName="cy" from={link.y2} to={link.y1} dur={dur} begin={halfDur} repeatCount="indefinite" />
+                        </circle>
+                      </g>
+                    );
+                  })}
                 </svg>
 
                 <div className="absolute inset-0 w-full h-full pointer-events-none">
@@ -668,6 +736,61 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                           <span className="material-symbols-outlined text-[16px]">stop</span>
                           Stop Simulation
                         </button>
+                      </div>
+
+                      {/* Scenario selector */}
+                      <div className="space-y-2 pt-2 border-t border-surface dark:border-surface-highlight">
+                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Preset Security Scenarios</div>
+                        <div className="flex gap-2">
+                          <select
+                            value={selectedScenario}
+                            onChange={e => setSelectedScenario(e.target.value)}
+                            className="flex-1 bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-9 px-2 outline-none font-mono"
+                          >
+                            <option value="ddos_gateway">DDoS Attack on Hub</option>
+                            <option value="hvac_spoofing">HVAC Sensor Spoofing</option>
+                            <option value="brute_force">Gateway Brute Force</option>
+                          </select>
+                          <button
+                            onClick={handleRunScenario}
+                            disabled={runningScenario}
+                            className="px-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs uppercase flex items-center justify-center gap-1 transition-colors outline-none"
+                          >
+                            {runningScenario ? (
+                              <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                            ) : (
+                              <span className="material-symbols-outlined text-sm">rocket_launch</span>
+                            )}
+                            Run
+                          </button>
+                        </div>
+                        <div className="text-[9px] text-muted dark:text-gray-500 leading-normal">
+                          Runs a pre-scripted multi-step attack simulation with automated baseline.
+                        </div>
+                      </div>
+
+                      {/* Trace Replay */}
+                      <div className="space-y-2 pt-2 border-t border-surface dark:border-surface-highlight">
+                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Network Trace Replay</div>
+                        <div className="flex flex-col gap-1.5">
+                          <input
+                            type="file"
+                            accept=".json"
+                            id="trace-upload-input"
+                            className="hidden"
+                            onChange={handleTraceUpload}
+                          />
+                          <label
+                            htmlFor="trace-upload-input"
+                            className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold uppercase border border-dashed border-surface dark:border-surface-highlight hover:border-blue-500/50 text-muted dark:text-gray-400 hover:text-blue-400 cursor-pointer transition-all"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                            Upload Packet JSON
+                          </label>
+                        </div>
+                        <div className="text-[9px] text-muted dark:text-gray-500 leading-normal">
+                          Replay recorded packet traces (JSON array) line-by-line through the IPS.
+                        </div>
                       </div>
 
                       {/* How it works */}

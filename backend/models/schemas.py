@@ -96,6 +96,7 @@ class Alert(BaseModel):
     actionTaken: Optional[ActionTaken] = None
     detectionMethod: Optional[DetectionMethod] = None
     source_ip: Optional[str] = None
+    feature_contributions: Optional[dict[str, float]] = None
 
 
 # ──────────────────────────────────────────────
@@ -142,6 +143,11 @@ class MetricsResponse(BaseModel):
     devices: list[Device]
     active_attack: Optional[str] = None
     ml_model_trained: bool = False
+    ml_precision: float = 0.0
+    ml_recall: float = 0.0
+    ml_f1_score: float = 0.0
+    ml_accuracy: float = 0.0
+    confusion_matrix: dict[str, int] = Field(default_factory=dict)
 
 
 class ChartDataPoint(BaseModel):

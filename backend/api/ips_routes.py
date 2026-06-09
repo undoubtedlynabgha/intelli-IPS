@@ -6,8 +6,9 @@ Endpoints for alerts, metrics, logs, and real-time event streaming (SSE).
 import json
 import asyncio
 from datetime import datetime
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from models.schemas import Alert, MetricsResponse, LogEntry, ChartDataPoint
 
 router = APIRouter(prefix="/ips", tags=["IPS Engine"])
@@ -93,6 +94,8 @@ async def get_metrics():
         if a.actionTaken and a.actionTaken.value == "prevented"
     )
 
+    ml_metrics = detector.get_ml_metrics()
+
     return MetricsResponse(
         simulation_running=state["running"],
         total_packets=state["total_packets"],
@@ -107,6 +110,11 @@ async def get_metrics():
         devices=network.get_all_devices(),
         active_attack=state["attack_simulator"].active_attack,
         ml_model_trained=detector.ml_detector.is_trained,
+        ml_precision=ml_metrics["ml_precision"],
+        ml_recall=ml_metrics["ml_recall"],
+        ml_f1_score=ml_metrics["ml_f1_score"],
+        ml_accuracy=ml_metrics["ml_accuracy"],
+        confusion_matrix=ml_metrics["confusion_matrix"],
     )
 
 
@@ -222,4 +230,151 @@ async def clear_logs():
         status="SUCCESS",
     ))
     return {"status": "clear_complete"}
+
+
+# ──────────────────────────────────────────────
+# GET /ips/firewall-script
+# ──────────────────────────────────────────────
+@router.get("/firewall-script")
+async def get_firewall_script(ip: str, os_type: str = "windows"):
+    """Generate and download a firewall rule script to block the attacker IP."""
+    if os_type.lower() == "windows":
+        script_content = (
+            f"# PowerShell script to block malicious IP: {ip}\n"
+            f"# Run as Administrator\n\n"
+            f"New-NetFirewallRule -DisplayName \"Intelli IPS Block {ip}\" "
+            f"-Direction Inbound -Action Block -RemoteAddress {ip}\n"
+            f"Write-Host \"Successfully blocked inbound traffic from {ip}\"\n"
+        )
+        media_type = "application/octet-stream"
+        filename = f"block-{ip.replace('.', '_')}.ps1"
+    else:
+        script_content = (
+            f"#!/bin/bash\n"
+            f"# Shell script to block malicious IP: {ip}\n"
+            f"# Run with sudo\n\n"
+            f"sudo iptables -A INPUT -s {ip} -j DROP\n"
+            f"echo \"Successfully blocked inbound traffic from {ip}\"\n"
+        )
+        media_type = "application/x-sh"
+        filename = f"block-{ip.replace('.', '_')}.sh"
+
+    return Response(
+        content=script_content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+# ──────────────────────────────────────────────
+# POST /ips/retrain
+# ──────────────────────────────────────────────
+class RetrainRequest(BaseModel):
+    contamination: float
+    n_estimators: int
+
+@router.post("/retrain")
+async def retrain_ml_model(req: RetrainRequest):
+    """Retrain the Isolation Forest model with custom hyperparameters."""
+    state = get_app_state()
+    detector = state["detector"]
+    
+    # Update hyperparameters
+    detector.ml_detector.model = detector.ml_detector.model.__class__(
+        contamination=req.contamination,
+        n_estimators=req.n_estimators,
+        random_state=42
+    )
+    
+    # Collect all normal packets from history or generate normal data to retrain
+    from simulation.traffic import generate_traffic_batch
+    active_devices = state["network"].get_active_devices()
+    normal_packets = []
+    for _ in range(20):
+        normal_packets.extend(generate_traffic_batch(active_devices))
+        
+    baselines = {
+        d["id"]: d.get("normal_packet_rate", 5)
+        for d in state["network"].devices.values()
+    }
+    detector.train_ml_model(normal_packets, baselines)
+    
+    # Log retraining
+    import uuid
+    state["logs"].append(LogEntry(
+        id=f"LOG-{uuid.uuid4().hex[:8]}",
+        timestamp=datetime.now().strftime("%H:%M:%S"),
+        source="IPS_ENGINE",
+        category="SYSTEM",
+        message=f"ML Anomaly Model retrained. Contamination: {req.contamination}, Estimators: {req.n_estimators}.",
+        status="SUCCESS",
+    ))
+    
+    return {"status": "success", "message": "ML Model retrained successfully."}
+
+
+# ──────────────────────────────────────────────
+# GET /ips/reports/download
+# ──────────────────────────────────────────────
+@router.get("/reports/download")
+async def download_report_csv():
+    """Export the security audit report as a detailed CSV file."""
+    import io
+    import csv
+    
+    state = get_app_state()
+    detector = state["detector"]
+    network = state["network"]
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Title Section
+    writer.writerow(["INTELLI IPS - SECURITY INCIDENT AUDIT REPORT"])
+    writer.writerow(["Generated At", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+    writer.writerow([])
+    
+    # Summary Metrics
+    writer.writerow(["SUMMARY METRICS"])
+    writer.writerow(["Total Inspected Packets", state["total_packets"]])
+    writer.writerow(["Total Flagged Threats", len(state["alerts"])])
+    blocked_count = sum(1 for a in state["alerts"] if a.actionTaken and a.actionTaken.value == "blocked")
+    writer.writerow(["Prevented Actions (Blocked)", blocked_count])
+    writer.writerow(["Detection Rate", f"{detector.get_detection_rate()}%"])
+    writer.writerow(["False Positive Rate", f"{detector.get_false_positive_rate()}%"])
+    writer.writerow([])
+    
+    # Device Registry
+    writer.writerow(["DEVICE INVENTORY"])
+    writer.writerow(["Device ID", "Name", "Type", "IP Address", "MAC Address", "Status", "Allowed Whitelist"])
+    for dev in network.get_all_devices():
+        writer.writerow([dev["id"], dev["name"], dev["type"], dev.get("ip", ""), dev.get("mac", ""), dev["status"], dev.get("allowed", True)])
+    writer.writerow([])
+    
+    # Active Threats
+    writer.writerow(["SECURITY ALERTS LOG"])
+    writer.writerow(["Alert ID", "Timestamp", "Source IP", "Device Name", "Device ID", "Threat Level", "Threat Name", "Assessment", "Confidence (%)", "Action Taken", "Detection Method"])
+    for alert in state["alerts"]:
+        writer.writerow([
+            alert.id,
+            alert.timestamp,
+            alert.source_ip or "",
+            alert.device,
+            alert.deviceId,
+            alert.risk.value,
+            alert.threat,
+            alert.assessment,
+            alert.confidence,
+            alert.actionTaken.value if alert.actionTaken else "",
+            alert.detectionMethod.value if alert.detectionMethod else ""
+        ])
+        
+    output.seek(0)
+    
+    filename = f"intelli_ips_audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 

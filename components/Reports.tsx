@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import Groq from "groq-sdk";
+import { ipsApi } from '../services/ipsApi';
 
 const REPORT_DATA = [
   { name: 'Mon', preventions: 12, performance: 98 },
@@ -144,6 +145,14 @@ Provide an executive, non-technical security summary and analysis of this statis
           <p className="text-muted dark:text-gray-500 font-mono text-xs uppercase tracking-[0.2em]">Mitigation Period: Real-time Simulation Feed</p>
         </div>
         <div className="flex gap-3">
+          <a 
+            href={ipsApi.getReportDownloadUrl()}
+            download
+            className="px-4 py-2 border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-black dark:hover:border-white text-xs font-bold font-mono transition-all flex items-center gap-2 uppercase outline-none"
+          >
+            <span className="material-symbols-outlined text-sm">download</span> 
+            Export CSV
+          </a>
           <button 
             onClick={handleExportPdf}
             disabled={isExporting}

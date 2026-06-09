@@ -30,6 +30,7 @@ export interface Alert {
   description: string;
   tags: string[];
   actionTaken?: 'detected' | 'prevented' | 'blocked';
+  feature_contributions?: Record<string, number>;
 }
 
 export interface ChartDataPoint {

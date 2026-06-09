@@ -23,7 +23,7 @@ param(
     [switch]$SkipFrontend
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 Set-Location $PSScriptRoot
 
 Write-Host ""

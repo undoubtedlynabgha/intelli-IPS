@@ -4,7 +4,9 @@ Handles starting/stopping the simulation and triggering attacks.
 """
 
 from fastapi import APIRouter, HTTPException
-from models.schemas import AttackRequest, SimulationStatus, AttackType
+from models.schemas import AttackRequest, SimulationStatus, AttackType, LogEntry
+from pydantic import BaseModel
+import asyncio
 
 router = APIRouter(prefix="/simulation", tags=["Simulation"])
 
@@ -222,3 +224,150 @@ async def get_status():
         total_attacks_injected=state["attack_simulator"].total_attacks_injected,
         active_attack=state["attack_simulator"].active_attack,
     )
+
+
+# ──────────────────────────────────────────────
+# Scenario runner helper
+# ──────────────────────────────────────────────
+class ScenarioRequest(BaseModel):
+    scenario_type: str
+
+async def run_scenario_task(scenario_type: str):
+    state = get_app_state()
+    
+    # 1. Reset simulation
+    await reset_simulation()
+    
+    # 2. Start simulation
+    state["running"] = True
+    from main import simulation_loop
+    state["sim_task"] = asyncio.create_task(simulation_loop())
+    
+    # 3. Wait for baseline (12 seconds)
+    await asyncio.sleep(12)
+    
+    # Check if still running
+    if not state["running"]:
+        return
+        
+    # 4. Trigger attack based on scenario
+    if scenario_type == "hvac_spoofing":
+        target = state["network"].get_device("HVAC_01")
+        state["attack_simulator"].start_attack(
+            AttackType.DATA_SPOOFING,
+            target_device=target,
+            attacker_device=target,
+            custom_packet_rate=5
+        )
+        if target:
+            state["network"].set_device_threat(target["id"])
+            
+    elif scenario_type == "ddos_gateway":
+        target = state["network"].get_device("GW_01")
+        state["attack_simulator"].start_attack(
+            AttackType.DOS_MQTT,
+            target_device=target,
+            attacker_device=None,
+            custom_packet_rate=150
+        )
+        if target:
+            state["network"].set_device_threat(target["id"])
+            
+    elif scenario_type == "brute_force":
+        target = state["network"].get_device("GW_01")
+        state["attack_simulator"].start_attack(
+            AttackType.BRUTE_FORCE,
+            target_device=target,
+            attacker_device=None,
+            custom_packet_rate=12
+        )
+        if target:
+            state["network"].set_device_threat(target["id"])
+
+@router.post("/run-scenario")
+async def run_scenario(request: ScenarioRequest):
+    """Trigger a pre-scripted multi-step simulation scenario."""
+    asyncio.create_task(run_scenario_task(request.scenario_type))
+    return {
+        "status": "scenario_started",
+        "scenario": request.scenario_type,
+        "message": f"Scenario '{request.scenario_type}' initiated in background. Baseline training completes in ~10s."
+    }
+
+
+# ──────────────────────────────────────────────
+# Trace file replay
+# ──────────────────────────────────────────────
+class TraceRequest(BaseModel):
+    packets: list[dict]
+
+@router.post("/upload-trace")
+async def upload_trace(request: TraceRequest):
+    """
+    Accepts a list of packet JSON definitions and schedules them for immediate replay.
+    Allows replaying recorded network traces.
+    """
+    state = get_app_state()
+    await reset_simulation()
+    state["running"] = True
+    
+    async def replay_loop():
+        import uuid
+        from datetime import datetime
+        from models.schemas import TrafficPacket
+        
+        state["logs"].append(LogEntry(
+            id=f"LOG-{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            source="CORE",
+            category="SYSTEM",
+            message=f"Starting replay of {len(request.packets)} uploaded packets.",
+            status="SUCCESS",
+        ))
+        
+        chunk_size = 10
+        for i in range(0, len(request.packets), chunk_size):
+            if not state["running"]:
+                break
+                
+            chunk = request.packets[i:i+chunk_size]
+            replayed_packets = []
+            for pkt_data in chunk:
+                pkt = TrafficPacket(
+                    id=pkt_data.get("id") or f"PKT-{uuid.uuid4().hex[:8]}",
+                    timestamp=datetime.now(),
+                    source_ip=pkt_data.get("source_ip", "10.0.0.5"),
+                    source_device_id=pkt_data.get("source_device_id", "EXTERNAL"),
+                    destination_ip=pkt_data.get("destination_ip", "192.168.1.1"),
+                    protocol=pkt_data.get("protocol", "HTTP"),
+                    payload_size=pkt_data.get("payload_size", 100),
+                    packet_type=pkt_data.get("packet_type", "DATA"),
+                    sensor_value=pkt_data.get("sensor_value"),
+                    is_malicious=pkt_data.get("is_malicious", False),
+                    attack_type=pkt_data.get("attack_type")
+                )
+                replayed_packets.append(pkt)
+                
+            state["total_packets"] += len(replayed_packets)
+            
+            for packet in replayed_packets:
+                alert = state["detector"].inspect_packet(packet, 5)
+                if alert:
+                    mitigation_logs = state["mitigator"].mitigate(alert)
+                    state["alerts"].append(alert)
+                    state["logs"].extend(mitigation_logs)
+                    
+            await asyncio.sleep(1.0)
+            
+        state["logs"].append(LogEntry(
+            id=f"LOG-{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            source="CORE",
+            category="SYSTEM",
+            message="Replay of uploaded packets completed.",
+            status="SUCCESS",
+        ))
+        state["running"] = False
+        
+    asyncio.create_task(replay_loop())
+    return {"status": "replay_started", "packet_count": len(request.packets)}

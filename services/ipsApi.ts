@@ -52,6 +52,11 @@ export interface MetricsResponse {
   devices: Device[];
   active_attack: string | null;
   ml_model_trained: boolean;
+  ml_precision: number;
+  ml_recall: number;
+  ml_f1_score: number;
+  ml_accuracy: number;
+  confusion_matrix: { tp: number; fp: number; tn: number; fn: number };
 }
 
 export interface SimulationStatus {
@@ -124,6 +129,29 @@ export const ipsApi = {
   resetIps: () => request<{ status: string }>('/ips/reset', { method: 'POST' }),
 
   clearLogs: () => request<{ status: string }>('/ips/clear-logs', { method: 'POST' }),
+
+  runScenario: (scenario_type: string) =>
+    request<{ status: string; scenario: string; message: string }>('/simulation/run-scenario', {
+      method: 'POST',
+      body: JSON.stringify({ scenario_type }),
+    }),
+
+  uploadTrace: (packets: any[]) =>
+    request<{ status: string; packet_count: number }>('/simulation/upload-trace', {
+      method: 'POST',
+      body: JSON.stringify({ packets }),
+    }),
+
+  retrainMlModel: (contamination: number, n_estimators: number) =>
+    request<{ status: string; message: string }>('/ips/retrain', {
+      method: 'POST',
+      body: JSON.stringify({ contamination, n_estimators }),
+    }),
+
+  getFirewallScriptUrl: (ip: string, osType: 'windows' | 'linux') =>
+    `${API_BASE}/ips/firewall-script?ip=${ip}&os_type=${osType}`,
+
+  getReportDownloadUrl: () => `${API_BASE}/ips/reports/download`,
 
   blockDevice: (deviceId: string) =>
     request<{ status: string }>(`/devices/${deviceId}/block`, { method: 'POST' }),

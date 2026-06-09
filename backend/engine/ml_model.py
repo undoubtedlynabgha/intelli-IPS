@@ -46,6 +46,8 @@ class AnomalyDetector:
         self.min_training_samples: int = ML_FEATURE_WINDOW
         self.samples_since_retrain: int = 0
         self._device_rates: dict[str, deque] = {}  # track per-device packet counts
+        self.feature_means: np.ndarray = np.array([50.0, 20.0, 1.0, 1.0, 1.0])
+        self.feature_stds: np.ndarray = np.array([20.0, 5.0, 0.5, 0.5, 0.5])
 
     def extract_features(self, packet, device_baseline_rate: float = 5.0) -> np.ndarray:
         """Extract a numerical feature vector from a traffic packet."""
@@ -91,30 +93,59 @@ class AnomalyDetector:
             if len(self.training_buffer) >= self.min_training_samples:
                 X = np.array(self.training_buffer)
                 self.model.fit(X)
+                self.feature_means = np.mean(X, axis=0)
+                self.feature_stds = np.std(X, axis=0)
                 self.is_trained = True
                 self.training_buffer.clear()
                 logger.info(f"ML Model trained on {len(X)} samples")
             return
 
         self.model.fit(X)
+        self.feature_means = np.mean(X, axis=0)
+        self.feature_stds = np.std(X, axis=0)
         self.is_trained = True
         self.samples_since_retrain = 0
         logger.info(f"ML Model trained on {len(X)} samples")
 
-    def predict(self, packet, device_baseline_rate: float = 5.0) -> tuple[bool, float]:
+    def get_feature_contributions(self, features: np.ndarray) -> dict[str, float]:
+        """Calculate explanation contributions for the feature dimensions."""
+        if not self.is_trained or not hasattr(self, "feature_means"):
+            return {
+                "payload_size": 20.0,
+                "sensor_value": 20.0,
+                "packet_rate": 20.0,
+                "protocol": 20.0,
+                "packet_type": 20.0
+            }
+        
+        # Scale deviations by historical standard deviation
+        deviations = np.abs(features - self.feature_means) / np.maximum(self.feature_stds, 1e-5)
+        names = ["payload_size", "sensor_value", "packet_rate", "protocol", "packet_type"]
+        
+        total_dev = np.sum(deviations)
+        if total_dev == 0:
+            return {name: 20.0 for name in names}
+            
+        contributions = {}
+        for name, dev in zip(names, deviations):
+            contributions[name] = round((dev / total_dev) * 100, 1)
+            
+        return contributions
+
+    def predict(self, packet, device_baseline_rate: float = 5.0) -> tuple[bool, float, dict[str, float]]:
         """
         Predict whether a packet is anomalous.
         
         Returns:
-            (is_anomaly: bool, anomaly_score: float)
-            anomaly_score: lower = more anomalous (IF convention)
+            (is_anomaly: bool, anomaly_score: float, contributions: dict[str, float])
         """
         if not self.is_trained:
-            return False, 0.0
+            return False, 0.0, {}
 
-        features = self.extract_features(packet, device_baseline_rate).reshape(1, -1)
-        prediction = self.model.predict(features)[0]  # 1 = normal, -1 = anomaly
-        score = self.model.score_samples(features)[0]  # negative = more anomalous
+        features = self.extract_features(packet, device_baseline_rate)
+        features_reshaped = features.reshape(1, -1)
+        prediction = self.model.predict(features_reshaped)[0]  # 1 = normal, -1 = anomaly
+        score = self.model.score_samples(features_reshaped)[0]  # negative = more anomalous
 
         is_anomaly = prediction == -1
         # Convert IsolationForest score to a clean 0-100 confidence.
@@ -127,7 +158,8 @@ class AnomalyDetector:
             confidence = int(max(0, 50 - (score + 0.5) * 100))
             
         confidence = max(0, min(100, confidence))
-        return is_anomaly, confidence
+        contributions = self.get_feature_contributions(features)
+        return is_anomaly, confidence, contributions
 
     def incremental_update(self, normal_packet, device_baseline_rate: float = 5.0):
         """
@@ -141,6 +173,8 @@ class AnomalyDetector:
         if self.samples_since_retrain >= ANOMALY_RETRAIN_INTERVAL and len(self.training_buffer) >= self.min_training_samples:
             X = np.array(self.training_buffer[-ANOMALY_RETRAIN_INTERVAL * 2:])
             self.model.fit(X)
+            self.feature_means = np.mean(X, axis=0)
+            self.feature_stds = np.std(X, axis=0)
             self.samples_since_retrain = 0
             logger.info(f"ML Model retrained with {len(X)} samples")
 
@@ -150,6 +184,8 @@ class AnomalyDetector:
         self.training_buffer.clear()
         self.samples_since_retrain = 0
         self._device_rates.clear()
+        self.feature_means = np.array([50.0, 20.0, 1.0, 1.0, 1.0])
+        self.feature_stds = np.array([20.0, 5.0, 0.5, 0.5, 0.5])
         self.model = IsolationForest(
             contamination=ANOMALY_CONTAMINATION,
             n_estimators=100,

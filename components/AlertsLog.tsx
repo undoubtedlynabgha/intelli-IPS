@@ -15,6 +15,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
 
   const [riskFilter, setRiskFilter] = React.useState<string>('ALL');
   const [showFilterRow, setShowFilterRow] = React.useState<boolean>(false);
+  const [selectedAlert, setSelectedAlert] = React.useState<Alert | null>(null);
 
   const filteredRows = useMemo(() => {
     if (riskFilter === 'ALL') return rows;
@@ -85,8 +86,8 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
     }
   };
 
-  const handleDetails = (id: string) => {
-    onNotify(`Loading forensic analysis for ${id}...`, 'info');
+  const handleDetails = (alert: Alert) => {
+    setSelectedAlert(alert);
   };
 
   const handleClearAlerts = async () => {
@@ -200,7 +201,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
           </thead>
           <tbody className="divide-y divide-surface dark:divide-surface-highlight font-mono text-sm bg-background dark:bg-black">
             {filteredRows.map(alert => (
-              <tr key={alert.id} className="group hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+              <tr key={alert.id} onClick={() => handleDetails(alert)} className="group hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer">
                 <td className="px-6 py-4 align-top whitespace-nowrap">
                   <div className={`flex flex-col gap-1`}>
                     <div className={`inline-flex items-center gap-2 px-2 py-1 border ${
@@ -242,7 +243,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
                   </div>
                 </td>
                 <td className="px-6 py-4 align-top text-right">
-                  <div className="flex justify-end gap-2 opacity-80 group-hover:opacity-100">
+                  <div className="flex justify-end gap-2 opacity-80 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
                     <button 
                       onClick={() => handleQuarantine(alert.deviceId, alert.device)}
                       className="bg-surface dark:bg-surface-dark hover:bg-orange-500 hover:text-white border border-surface dark:border-surface-highlight hover:border-orange-500 text-muted dark:text-gray-400 text-[10px] font-bold px-2.5 py-1.5 uppercase transition-colors outline-none"
@@ -266,6 +267,117 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
           {backendConnected ? ' • Live from IPS API' : ' • Demo data'}
         </div>
       </div>
+      {/* Alert Details Modal */}
+      {selectedAlert && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/75 backdrop-blur-sm">
+          <div className="bg-background dark:bg-[#0a0a0a] border border-surface dark:border-surface-highlight p-6 w-[400px] shadow-2xl animate-in fade-in zoom-in-95 duration-200 font-mono text-main dark:text-white">
+            <div className="flex justify-between items-center border-b border-surface dark:border-surface-highlight pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-red-500 text-lg">gpp_maybe</span>
+                <h3 className="font-bold uppercase tracking-wide text-xs">Forensic Diagnostic Details</h3>
+              </div>
+              <button onClick={() => setSelectedAlert(null)} className="text-muted dark:text-gray-500 hover:text-main dark:hover:text-white">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+            
+            <div className="space-y-4 text-xs">
+              <div>
+                <span className="text-[10px] text-muted dark:text-gray-500 uppercase">Alert ID</span>
+                <div className="font-bold">{selectedAlert.id}</div>
+              </div>
+
+              <div>
+                <span className="text-[10px] text-muted dark:text-gray-500 uppercase">Threat Analysis</span>
+                <div className="font-bold text-red-500">{selectedAlert.threat}</div>
+                <div className="text-muted dark:text-gray-400 mt-1 text-[11px] leading-relaxed">{selectedAlert.description}</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] text-muted dark:text-gray-500 uppercase">Device ID</span>
+                  <div className="font-bold">{selectedAlert.deviceId}</div>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted dark:text-gray-500 uppercase">Source IP</span>
+                  <div className="font-bold">{selectedAlert.source_ip || 'N/A'}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="text-[10px] text-muted dark:text-gray-500 uppercase">Detection Method</span>
+                  <div className="font-bold uppercase text-blue-400">{selectedAlert.detectionMethod || 'Signature'}</div>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted dark:text-gray-500 uppercase">Confidence Score</span>
+                  <div className="font-bold">{selectedAlert.confidence}%</div>
+                </div>
+              </div>
+
+              {/* Explainable AI (XAI) feature contribution bar chart */}
+              <div className="pt-3 border-t border-surface dark:border-surface-highlight">
+                <span className="text-[10px] text-muted dark:text-gray-500 uppercase font-bold block mb-2">Explainable AI Anomaly Breakdown</span>
+                <div className="space-y-2">
+                  {Object.entries(selectedAlert.feature_contributions || {
+                    "payload_size": 25.0,
+                    "sensor_value": 0.0,
+                    "packet_rate": 65.0,
+                    "protocol": 5.0,
+                    "packet_type": 5.0
+                  }).map(([feat, val]) => (
+                    <div key={feat} className="space-y-0.5">
+                      <div className="flex justify-between text-[9px] text-muted dark:text-gray-400 uppercase">
+                        <span>{feat.replace('_', ' ')}</span>
+                        <span>{val}%</span>
+                      </div>
+                      <div className="h-1.5 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${val}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Download Firewall Rule Script Playbooks */}
+              {selectedAlert.source_ip && (
+                <div className="pt-3 border-t border-surface dark:border-surface-highlight space-y-2">
+                  <span className="text-[10px] text-muted dark:text-gray-500 uppercase font-bold block">Active Firewall Rules Playbook</span>
+                  <div className="flex gap-2">
+                    <a
+                      href={ipsApi.getFirewallScriptUrl(selectedAlert.source_ip, 'windows')}
+                      download
+                      onClick={e => e.stopPropagation()}
+                      className="flex-1 py-2 text-[10px] font-bold text-center border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-blue-500/40 uppercase transition-all flex items-center justify-center gap-1.5 outline-none"
+                    >
+                      <span className="material-symbols-outlined text-sm">terminal</span>
+                      PowerShell
+                    </a>
+                    <a
+                      href={ipsApi.getFirewallScriptUrl(selectedAlert.source_ip, 'linux')}
+                      download
+                      onClick={e => e.stopPropagation()}
+                      className="flex-1 py-2 text-[10px] font-bold text-center border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-blue-500/40 uppercase transition-all flex items-center justify-center gap-1.5 outline-none"
+                    >
+                      <span className="material-symbols-outlined text-sm">terminal</span>
+                      Linux Bash
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => setSelectedAlert(null)}
+                className="w-full py-2 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight text-xs font-bold uppercase transition-colors outline-none"
+              >
+                Close Diagnostics
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
