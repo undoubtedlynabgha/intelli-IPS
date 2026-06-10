@@ -111,6 +111,17 @@ export const ipsApi = {
 
   getSimulationStatus: () => request<SimulationStatus>('/simulation/status'),
 
+  getMode: () => request<{ mode: 'simulation' | 'real' }>('/simulation/mode'),
+
+  setMode: (mode: 'simulation' | 'real') =>
+    request<{ status: string; mode: string }>('/simulation/mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+
+  scanRealNetwork: () =>
+    request<{ status: string; message: string }>('/simulation/scan-real', { method: 'POST' }),
+
   triggerAttack: (attack_type: AttackType, target_device_id?: string, attacker_device_id?: string, packet_rate?: number) =>
     request<{ status: string; attack_type: string; label: string }>('/simulation/attack', {
       method: 'POST',

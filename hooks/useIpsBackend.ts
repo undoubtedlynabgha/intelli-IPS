@@ -19,6 +19,7 @@ export function useIpsBackend() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [trafficChart, setTrafficChart] = useState<ChartDataPoint[]>([]);
   const [simStatus, setSimStatus] = useState<SimulationStatus | null>(null);
+  const [mode, setModeState] = useState<'simulation' | 'real'>('simulation');
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,12 +42,13 @@ export function useIpsBackend() {
 
   const refresh = useCallback(async () => {
     try {
-      const [m, a, l, t, s] = await Promise.all([
+      const [m, a, l, t, s, modeRes] = await Promise.all([
         ipsApi.getMetrics(),
         ipsApi.getAlerts(100),
         ipsApi.getLogs(80),
         ipsApi.getTrafficChart(),
         ipsApi.getSimulationStatus(),
+        ipsApi.getMode().catch(() => ({ mode: 'simulation' as const })),
       ]);
       if (!mountedRef.current) return;
       setMetrics(m);
@@ -54,6 +56,7 @@ export function useIpsBackend() {
       setLogs(l);
       setTrafficChart(t);
       setSimStatus(s);
+      setModeState(modeRes.mode);
       setConnected(true);
       // Reset reconnect delay on success
       reconnectDelayRef.current = RECONNECT_MS;
@@ -216,6 +219,19 @@ export function useIpsBackend() {
     return r;
   };
 
+  const setMode = async (newMode: 'simulation' | 'real') => {
+    const r = await ipsApi.setMode(newMode);
+    setModeState(newMode);
+    await refresh();
+    return r;
+  };
+
+  const scanRealNetwork = async () => {
+    const r = await ipsApi.scanRealNetwork();
+    await refresh();
+    return r;
+  };
+
   return {
     connected,
     loading,
@@ -225,11 +241,14 @@ export function useIpsBackend() {
     trafficChart,
     simStatus,
     devices,
+    mode,
     refresh,
     startSimulation,
     stopSimulation,
     resetSimulation,
     triggerAttack,
+    setMode,
+    scanRealNetwork,
     ipsApi,
   };
 }

@@ -112,12 +112,14 @@ ${logText}
 
 Your response guidelines:
 1. Always maintain context of the live metrics, device list, and quarantine logs provided above.
-2. Be precise and technical. Reference specific device names, IPs, timestamps, and alert types.
-3. If an attack is active, analyze the vector and explain what the IPS is doing (e.g. dropping packet rates, quarantining nodes).
-4. If asked why a node is quarantined or blocked, look for it in the device registry and explain the mitigation triggers.
-5. Format code elements (IPs, MACs, ports, protocols, or actions like BLOCKED) using single backticks (e.g., \`192.168.1.50\`, \`MQTT\`).
-6. Do not include introductory filler or preambles like "Based on the live data provided...". Answer directly as an embedded security system.
-7. Keep responses structured, concise (maximum 3 paragraphs), and highly professional.`;
+2. Keep your answers short, concise, and highly precise (maximum of 1-2 paragraphs or bullet points). Avoid lengthy explanations.
+3. Always write the device name *before* the device IP address (e.g., \`Front_Door_Camera\` (\`192.168.1.105\`)). Do not write the IP address before the device name under any circumstance.
+4. Reference specific device names, IPs, timestamps, and alert types.
+5. If an attack is active, analyze the vector and explain what the IPS is doing (e.g. dropping packet rates, quarantining nodes).
+6. If asked why a node is quarantined or blocked, look for it in the device registry and explain the mitigation triggers.
+7. Format code elements (IPs, MACs, ports, protocols, or actions like BLOCKED) using single backticks (e.g., \`192.168.1.50\`, \`MQTT\`).
+8. Do not include introductory filler or preambles like "Based on the live data provided...". Answer directly as an embedded security system.
+9. Keep responses structured, concise, and highly professional.`;
 
       const response = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',

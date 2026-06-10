@@ -371,3 +371,121 @@ async def upload_trace(request: TraceRequest):
         
     asyncio.create_task(replay_loop())
     return {"status": "replay_started", "packet_count": len(request.packets)}
+
+
+# ──────────────────────────────────────────────
+# GET /simulation/mode & POST /simulation/mode
+# ──────────────────────────────────────────────
+@router.get("/mode")
+async def get_mode():
+    """Get current operation mode (simulation vs real)."""
+    state = get_app_state()
+    return {"mode": state.get("mode", "simulation")}
+
+
+class ModeRequest(BaseModel):
+    mode: str
+
+
+@router.post("/mode")
+async def set_mode(req: ModeRequest):
+    """Set operation mode (simulation vs real)."""
+    state = get_app_state()
+    mode = req.mode.lower().strip()
+    if mode not in ["simulation", "real"]:
+        raise HTTPException(status_code=400, detail="Invalid mode. Must be 'simulation' or 'real'")
+    
+    state["mode"] = mode
+    # Reset network to apply initial state for the selected mode
+    state["network"].reset()
+    state["baseline_trained"] = False
+    
+    import uuid
+    from datetime import datetime
+    
+    if mode == "real":
+        # Clear simulated devices and keep only Gateway
+        gw = state["network"].devices.get("GW_01")
+        state["network"].devices = {}
+        if gw:
+            state["network"].devices["GW_01"] = gw
+            
+        # Log transition
+        state["logs"].append(LogEntry(
+            id=f"LOG-{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            source="CORE",
+            category="SYSTEM",
+            message="Operation mode changed to REAL IoT NETWORK MONITORING. Initializing network sweep...",
+            status="SUCCESS",
+        ))
+        
+        async def background_initial_scan():
+            from main import scan_local_network
+            discovered = await scan_local_network()
+            for dev in discovered:
+                state["network"].add_device(dev)
+            state["logs"].append(LogEntry(
+                id=f"LOG-{uuid.uuid4().hex[:8]}",
+                timestamp=datetime.now().strftime("%H:%M:%S"),
+                source="CORE",
+                category="SYSTEM",
+                message=f"Initial network sweep complete. Discovered {len(discovered)} active local devices.",
+                status="SUCCESS",
+            ))
+            
+        asyncio.create_task(background_initial_scan())
+    else:
+        state["logs"].append(LogEntry(
+            id=f"LOG-{uuid.uuid4().hex[:8]}",
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            source="CORE",
+            category="SYSTEM",
+            message="Operation mode changed to SIMULATION. Restored default virtual IoT topology.",
+            status="SUCCESS",
+        ))
+        
+    return {"status": "success", "mode": mode}
+
+
+# ──────────────────────────────────────────────
+# POST /simulation/scan-real
+# ──────────────────────────────────────────────
+@router.post("/scan-real")
+async def trigger_real_scan():
+    """Trigger a manual wide-spectrum local network sweep."""
+    state = get_app_state()
+    if state.get("real_scanner_running", False):
+        raise HTTPException(status_code=409, detail="A network scan is already in progress.")
+        
+    state["real_scanner_running"] = True
+    
+    async def run_scan():
+        from main import scan_local_network
+        import uuid
+        from datetime import datetime
+        try:
+            discovered = await scan_local_network()
+            # Merge discovered devices into network.devices
+            for dev in discovered:
+                dev_id = dev["id"]
+                if dev_id not in state["network"].devices:
+                    state["network"].add_device(dev)
+                    
+            state["logs"].append(LogEntry(
+                id=f"LOG-{uuid.uuid4().hex[:8]}",
+                timestamp=datetime.now().strftime("%H:%M:%S"),
+                source="CORE",
+                category="SYSTEM",
+                message=f"Manual wide-spectrum local network sweep complete. Found {len(discovered)} active devices.",
+                status="SUCCESS",
+            ))
+        except Exception as e:
+            import logging
+            logging.getLogger("intelli_ips.api").error(f"Error during manual sweep: {e}")
+        finally:
+            state["real_scanner_running"] = False
+            
+    asyncio.create_task(run_scan())
+    return {"status": "scan_started", "message": "Manual network sweep initiated in background."}
+

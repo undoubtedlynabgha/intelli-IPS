@@ -10,6 +10,8 @@ interface SettingsProps {
   devices?: Device[];
   ipsApi?: any;
   backendConnected?: boolean;
+  mode?: 'simulation' | 'real';
+  onToggleMode?: (mode: 'simulation' | 'real') => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({
@@ -19,6 +21,8 @@ const Settings: React.FC<SettingsProps> = ({
   devices = [],
   ipsApi,
   backendConnected = false,
+  mode = 'simulation',
+  onToggleMode,
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [deviceName, setDeviceName] = useState('');
@@ -81,6 +85,69 @@ const Settings: React.FC<SettingsProps> = ({
           <h1 className="text-2xl font-black uppercase tracking-tight text-main dark:text-white">System Configuration</h1>
           <p className="text-muted dark:text-gray-500 text-xs font-mono mt-1 uppercase tracking-widest">Manage devices, policies, and display preferences</p>
         </div>
+
+        {/* Operation Mode */}
+        {backendConnected && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-muted dark:text-gray-400 text-[18px]">settings_ethernet</span>
+              <h2 className="text-main dark:text-white font-bold text-sm uppercase tracking-widest">Operation Mode</h2>
+              <div className="h-px flex-1 bg-surface dark:bg-surface-highlight"></div>
+            </div>
+            <p className="text-muted dark:text-gray-500 text-xs font-mono uppercase tracking-widest">Toggle between simulating virtual IoT networks and monitoring your real local subnet devices</p>
+
+            <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-main dark:text-white uppercase">Network Source Mode</p>
+                <p className="text-xs text-muted dark:text-gray-500 mt-1 font-mono">
+                  Currently active: <strong className={mode === 'real' ? 'text-blue-400 font-bold' : 'text-yellow-500 font-bold'}>{mode === 'real' ? 'REAL NETWORK MONITORING' : 'SIMULATION MODE'}</strong>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onToggleMode) {
+                      try {
+                        await onToggleMode('simulation');
+                        onNotify('Switched to Simulation Mode. Virtual IoT network loaded.', 'success');
+                      } catch (err) {
+                        onNotify('Failed to toggle mode', 'error');
+                      }
+                    }
+                  }}
+                  className={`h-9 px-4 text-xs font-bold font-mono uppercase transition-all cursor-pointer ${
+                    mode === 'simulation'
+                      ? 'bg-yellow-600 text-white'
+                      : 'border border-surface dark:border-surface-highlight text-muted hover:text-main dark:hover:text-white bg-transparent'
+                  }`}
+                >
+                  Simulation
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onToggleMode) {
+                      try {
+                        await onToggleMode('real');
+                        onNotify('Switched to Real IoT Network Mode. Starting background sweep...', 'success');
+                      } catch (err) {
+                        onNotify('Failed to toggle mode', 'error');
+                      }
+                    }
+                  }}
+                  className={`h-9 px-4 text-xs font-bold font-mono uppercase transition-all cursor-pointer ${
+                    mode === 'real'
+                      ? 'bg-blue-600 text-white'
+                      : 'border border-surface dark:border-surface-highlight text-muted hover:text-main dark:hover:text-white bg-transparent'
+                  }`}
+                >
+                  Real Subnet (ARP/Ping)
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Appearance */}
         <section className="space-y-4">

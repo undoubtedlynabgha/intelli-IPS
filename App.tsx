@@ -51,10 +51,13 @@ const AppInner: React.FC = () => {
     trafficChart,
     simStatus,
     devices: backendDevices,
+    mode,
     startSimulation,
     stopSimulation,
     resetSimulation,
     triggerAttack,
+    setMode,
+    scanRealNetwork,
     ipsApi,
   } = useIpsBackend();
 
@@ -99,11 +102,21 @@ const AppInner: React.FC = () => {
     }
   };
 
-  const handleScanMesh = () => {
+  const handleScanMesh = async () => {
     if (isScanning) return;
     setIsScanning(true);
     setScanProgress(0);
-    addToast('Initiating wide-spectrum IoT mesh scan...', 'info');
+
+    if (backendConnected && mode === 'real') {
+      addToast('Initiating real network wide-spectrum subnet scan...', 'info');
+      try {
+        await scanRealNetwork();
+      } catch (e) {
+        addToast('Real network scan failed', 'error');
+      }
+    } else {
+      addToast('Initiating wide-spectrum IoT mesh scan...', 'info');
+    }
 
     let progress = 0;
     const interval = setInterval(() => {
@@ -112,7 +125,7 @@ const AppInner: React.FC = () => {
         clearInterval(interval);
         setScanProgress(100);
         setIsScanning(false);
-        addToast('Mesh scan complete. System topology updated.', 'success');
+        addToast(backendConnected && mode === 'real' ? 'Subnet sweep complete. Real IoT nodes updated.' : 'Mesh scan complete. System topology updated.', 'success');
       } else {
         setScanProgress(progress);
       }
@@ -270,6 +283,8 @@ const AppInner: React.FC = () => {
             devices={displayDevices}
             ipsApi={ipsApi}
             backendConnected={backendConnected}
+            mode={mode}
+            onToggleMode={setMode}
           />
         );
       default:
@@ -379,11 +394,24 @@ const AppInner: React.FC = () => {
               {/* Backend status indicator */}
               <div className="hidden md:flex items-center gap-2 text-xs font-mono">
                 <span className={`w-1.5 h-1.5 rounded-full ${backendConnected ? 'bg-emerald-500 shadow-[0_0_6px_#10b981]' : 'bg-gray-600'}`}></span>
-                <span className={backendConnected ? 'text-emerald-500' : 'text-muted dark:text-gray-600'}>
+                <span className={backendConnected ? 'text-emerald-500 font-bold' : 'text-muted dark:text-gray-600'}>
                   {backendConnected ? 'API Connected' : 'Demo Mode'}
                 </span>
               </div>
               <div className="h-5 w-px bg-surface dark:bg-surface-highlight hidden md:block"></div>
+
+              {/* Operation Mode badge */}
+              {backendConnected && (
+                <>
+                  <div className="hidden md:flex items-center gap-2 text-xs font-mono">
+                    <span className={`w-1.5 h-1.5 rounded-full ${mode === 'real' ? 'bg-blue-400 shadow-[0_0_6px_#60a5fa]' : 'bg-yellow-500 shadow-[0_0_6px_#eab308]'}`}></span>
+                    <span className={mode === 'real' ? 'text-blue-400 font-bold' : 'text-yellow-500 font-bold'}>
+                      {mode === 'real' ? 'Real Subnet' : 'Simulation'}
+                    </span>
+                  </div>
+                  <div className="h-5 w-px bg-surface dark:bg-surface-highlight hidden md:block"></div>
+                </>
+              )}
 
               {/* Search */}
               <div className="hidden md:flex relative group w-48 items-center">

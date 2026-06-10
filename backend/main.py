@@ -11,6 +11,13 @@ import asyncio
 import time
 import logging
 import uuid
+import platform
+import socket
+import re
+import random
+import subprocess
+import concurrent.futures
+from typing import Optional
 from datetime import datetime
 from contextlib import asynccontextmanager
 
@@ -39,6 +46,135 @@ logging.basicConfig(
 logger = logging.getLogger("intelli_ips.main")
 
 # ──────────────────────────────────────────────
+# Real IoT Network Helper Functions
+# ──────────────────────────────────────────────
+def get_local_ip() -> str:
+    """Get the local IP of this machine."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
+def run_ping_latency_sync(ip: str) -> Optional[float]:
+    cmd = ["ping", "-n", "1", "-w", "400", ip] if platform.system() == "Windows" else ["ping", "-c", "1", "-W", "1", ip]
+    start_time = time.time()
+    try:
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore")
+        elapsed = (time.time() - start_time) * 1000.0
+        if res.returncode == 0:
+            match = re.search(r'time[=<]([\d\.]+)ms', res.stdout)
+            if match:
+                return float(match.group(1))
+            return round(elapsed, 1)
+        return None
+    except Exception:
+        return None
+
+async def ping_device_latency(ip: str) -> Optional[float]:
+    """Ping an IP address and return round-trip latency in milliseconds, or None if timeout."""
+    local_ip = get_local_ip()
+    if ip == local_ip or ip == '127.0.0.1':
+        return 1.2
+    
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, run_ping_latency_sync, ip)
+
+def run_ping_sync(ip: str):
+    cmd = ["ping", "-n", "1", "-w", "100", ip] if platform.system() == "Windows" else ["ping", "-c", "1", "-W", "1", ip]
+    try:
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+def run_arp_sync() -> str:
+    try:
+        res = subprocess.run(["arp", "-a"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, errors="ignore")
+        return res.stdout
+    except Exception:
+        return ""
+
+async def scan_local_network():
+    """Scans the local subnet using ping sweeps and ARP cache parsing in thread pools."""
+    local_ip = get_local_ip()
+    if local_ip == '127.0.0.1':
+        return []
+
+    parts = local_ip.split('.')
+    if len(parts) != 4:
+        return []
+    subnet_prefix = f"{parts[0]}.{parts[1]}.{parts[2]}."
+
+    loop = asyncio.get_running_loop()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
+        futures = [
+            loop.run_in_executor(executor, run_ping_sync, f"{subnet_prefix}{i}")
+            for i in range(1, 51)
+        ]
+        futures.append(loop.run_in_executor(executor, run_ping_sync, f"{subnet_prefix}254"))
+        await asyncio.gather(*futures)
+
+    output = await loop.run_in_executor(None, run_arp_sync)
+
+    discovered = []
+    ip_mac_pattern = re.compile(
+        r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+([0-9a-fA-F:-]{17})'
+    )
+
+    for line in output.split('\n'):
+        match = ip_mac_pattern.search(line)
+        if match:
+            ip_addr = match.group(1)
+            mac_addr = match.group(2).replace('-', ':').upper()
+            
+            if ip_addr.startswith(subnet_prefix) and ip_addr != local_ip:
+                last_octet = int(ip_addr.split('.')[-1])
+                dev_id = f"REAL_{last_octet}"
+                
+                if last_octet == 1:
+                    name = "Local_Router_Gateway"
+                    dev_type = "router"
+                elif last_octet in [100, 101, 102]:
+                    name = f"Smart_Speaker_{last_octet}"
+                    dev_type = "speaker"
+                elif last_octet in [105, 106, 110]:
+                    name = f"IP_Camera_{last_octet}"
+                    dev_type = "videocam"
+                else:
+                    name = f"IoT_Device_{last_octet}"
+                    dev_type = "sensors"
+
+                discovered.append({
+                    "id": dev_id,
+                    "name": name,
+                    "type": dev_type,
+                    "ip": ip_addr,
+                    "mac": mac_addr,
+                    "protocol": "MQTT" if dev_type == "sensors" else "CoAP" if dev_type == "speaker" else "HTTP",
+                    "status": "online",
+                    "allowed": True,
+                    "is_real": True
+                })
+
+    discovered.append({
+        "id": "REAL_HOST",
+        "name": f"Operator_Console ({platform.node()})",
+        "type": "precision_manufacturing",
+        "ip": local_ip,
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "protocol": "HTTP",
+        "status": "online",
+        "allowed": True,
+        "is_real": True
+    })
+
+    return discovered
+
+# ──────────────────────────────────────────────
 # Shared Application State
 # ──────────────────────────────────────────────
 network = IoTNetwork()
@@ -61,6 +197,8 @@ app_state = {
     "sim_task": None,
     "start_time": None,
     "baseline_trained": False,
+    "mode": "simulation",       # "simulation" or "real"
+    "real_scanner_running": False,
 }
 
 
@@ -98,28 +236,101 @@ async def simulation_loop():
             tick_start = time.time()
             tick += 1
 
-            # ─── 1. Generate normal traffic ──────────────
-            active_devices = state["network"].get_active_devices()
-            normal_packets = generate_traffic_batch(active_devices)
+            # ─── 1. Generate normal traffic and pings ────
+            if state["mode"] == "real":
+                # Monitor active real devices
+                real_monitored_devices = [
+                    d for d in state["network"].devices.values()
+                    if d["id"] != "GW_01" and d.get("ip")
+                ]
 
-            # ─── 2. Generate attack traffic (if active) ──
-            attack_active_before = state["attack_simulator"].is_active()
-            attack_packets = state["attack_simulator"].generate_attack_traffic()
-            attack_active_after = state["attack_simulator"].is_active()
+                async def check_device(dev):
+                    # Skip pinging quarantined devices to avoid updating their online status
+                    if dev["id"] in state["network"].quarantined_devices:
+                        return dev, None
+                    ip = dev["ip"]
+                    latency = await ping_device_latency(ip)
+                    return dev, latency
 
-            if attack_active_after:
-                target_dev = state["attack_simulator"].target_device
-                if target_dev:
-                    state["network"].set_device_threat(target_dev["id"])
-                attacker_dev = state["attack_simulator"].attacker_device
-                if attacker_dev:
-                    state["network"].set_device_threat(attacker_dev["id"])
-            elif attack_active_before:
-                # Attack naturally completed. Clear threat state of non-quarantined devices.
-                for dev_id in list(state["network"].devices.keys()):
-                    state["network"].clear_device_threat(dev_id)
+                results = await asyncio.gather(*[check_device(d) for d in real_monitored_devices])
 
-            # Combine all traffic
+                normal_packets = []
+                for dev, latency in results:
+                    dev_id = dev["id"]
+                    if dev_id in state["network"].quarantined_devices:
+                        continue
+                        
+                    if latency is not None:
+                        # Device is responding
+                        if dev["status"] == "blocked":
+                            state["network"].unquarantine_device(dev_id)
+                        
+                        # Generate some packets where the payload acts as latency context
+                        pkt_count = random.randint(1, 4)
+                        for _ in range(pkt_count):
+                            from models.schemas import TrafficPacket
+                            pkt = TrafficPacket(
+                                id=f"PKT-{uuid.uuid4().hex[:8].upper()}",
+                                timestamp=datetime.now(),
+                                source_ip=dev["ip"],
+                                source_device_id=dev_id,
+                                destination_ip="192.168.1.1",
+                                protocol=dev.get("protocol", "MQTT"),
+                                payload_size=random.randint(10, 50),
+                                packet_type="DATA",
+                                sensor_value=latency, # Map real ping latency as sensor value
+                                is_malicious=False
+                            )
+                            normal_packets.append(pkt)
+                    else:
+                        # Ping timeout! Quarantine it and raise an alert
+                        if dev_id not in state["network"].quarantined_devices:
+                            state["network"].quarantine_device(dev_id)
+                            alert = Alert(
+                                id=f"ALT-{uuid.uuid4().hex[:6].upper()}",
+                                risk=RiskLevel.CRITICAL,
+                                timestamp=datetime.now().strftime("%H:%M:%S"),
+                                device=dev["name"],
+                                deviceId=dev_id,
+                                threat="Device Link Loss / Connection Failure",
+                                assessment="Ping Timeout",
+                                confidence=100,
+                                description=f"Device {dev['name']} ({dev['ip']}) failed to respond to health checks. Automatically quarantined.",
+                                tags=["Link Failure", "Offline", "Ping Timeout"],
+                                actionTaken=ActionTaken.BLOCKED,
+                                detectionMethod=DetectionMethod.SIGNATURE,
+                                source_ip=dev["ip"]
+                            )
+                            state["alerts"].append(alert)
+                            state["logs"].append(LogEntry(
+                                id=f"LOG-{uuid.uuid4().hex[:8]}",
+                                timestamp=datetime.now().strftime("%H:%M:%S"),
+                                source=dev_id,
+                                category="MITIGATION",
+                                message=f"Device {dev['name']} isolated: Link loss detected (ping timeout).",
+                                status="BLOCKED"
+                            ))
+                attack_packets = []
+            else:
+                active_devices = state["network"].get_active_devices()
+                normal_packets = generate_traffic_batch(active_devices)
+
+                # ─── 2. Generate attack traffic (if active) ──
+                attack_active_before = state["attack_simulator"].is_active()
+                attack_packets = state["attack_simulator"].generate_attack_traffic()
+                attack_active_after = state["attack_simulator"].is_active()
+
+                if attack_active_after:
+                    target_dev = state["attack_simulator"].target_device
+                    if target_dev:
+                        state["network"].set_device_threat(target_dev["id"])
+                    attacker_dev = state["attack_simulator"].attacker_device
+                    if attacker_dev:
+                        state["network"].set_device_threat(attacker_dev["id"])
+                elif attack_active_before:
+                    # Attack naturally completed. Clear threat state of non-quarantined devices.
+                    for dev_id in list(state["network"].devices.keys()):
+                        state["network"].clear_device_threat(dev_id)
             all_packets = normal_packets + attack_packets
             state["total_packets"] += len(all_packets)
 
