@@ -10,9 +10,10 @@ Intelli IPS is an AI-driven Intrusion Prevention System designed for IoT network
 
 ## 🚀 Key Features
 
-* **Real-time Visualization**: Dynamic IoT mesh network animations and packet traffic flows.
+* **Real IoT Network Monitoring**: Scan your local subnet (via ping sweeps and ARP cache parsing) to discover actual local devices and monitor live latency and connection health.
+* **Real-time Visualization**: Dynamic IoT mesh network animations and packet traffic flows with distinct layouts—concentric circle layout for simulation and a top-down hierarchical tree layout (Gateway -> IPS Console -> Clients) for real network modes.
 * **Hybrid Threat Detection**: Signature-based inspection combined with an Isolation Forest ML engine.
-* **Simulation Lab**: Run preset security scenarios (such as DDoS attacks) to test network defenses.
+* **Simulation Lab & Active Monitor**: Run preset security scenarios (such as DDoS attacks) or monitor active subnet quarantines and whitelists directly from the sidebar console.
 * **Explainable AI (XAI)**: Detailed diagnostic reports and feature breakdown of threats in the Actions Log.
 * **Automated Mitigation**: Download host firewall scripts (PowerShell / Bash) directly from diagnostic reports.
 * **Analytics**: Export complete telemetry and security audit data to CSV.
@@ -22,7 +23,7 @@ Intelli IPS is an AI-driven Intrusion Prevention System designed for IoT network
 ## 💻 Getting Started (For End Users)
 
 ### 1. Download & Install
-1. Go to the [Releases Page](https://github.com/undoubtedlynabgha/intelli-IPS/releases) and download the latest version (`Intelli.IPS.Setup.1.0.1.exe`).
+1. Go to the [Releases Page](https://github.com/undoubtedlynabgha/intelli-IPS/releases) and download the latest version (`Intelli.IPS.Setup.1.0.2.exe`).
 2. Run the installer and follow the prompts.
 3. Launch **Intelli IPS** from your Start Menu or Desktop.
 
