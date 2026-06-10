@@ -61,7 +61,19 @@ const AppInner: React.FC = () => {
     ipsApi,
   } = useIpsBackend();
 
-  const displayDevices = backendConnected && backendDevices.length > 0 ? backendDevices : devices;
+  const displayDevices = React.useMemo(() => {
+    const rawDevices = backendConnected && backendDevices.length > 0 ? backendDevices : devices;
+    if (mode === 'real') return rawDevices;
+    return rawDevices.filter(d => {
+      const name = (d.name || '').toLowerCase();
+      const id = (d.id || '').toLowerCase();
+      if (id.startsWith('real_')) return false;
+      if (name.includes('iot_device_')) return false;
+      if (name.includes('operator_console')) return false;
+      if (name.includes('zvalata') || name.includes('zvlvtv')) return false;
+      return true;
+    });
+  }, [backendConnected, backendDevices, devices, mode]);
 
   const addToast = (message: string, type: Toast['type'] = 'info') => {
     const id = Date.now();
