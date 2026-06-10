@@ -77,7 +77,7 @@ SPOOFING_VALUE_DEVIATION = 5.0     # Z-score threshold for data spoofing
 # Anomaly Detection (ML) Settings
 # ──────────────────────────────────────────────
 ANOMALY_CONTAMINATION = 0.05       # expected anomaly fraction for Isolation Forest
-ANOMALY_RETRAIN_INTERVAL = 100     # retrain after N new normal packets
+ANOMALY_RETRAIN_INTERVAL = 500     # retrain after N new normal packets
 ML_FEATURE_WINDOW = 50            # sliding window size for feature extraction
 
 # ──────────────────────────────────────────────

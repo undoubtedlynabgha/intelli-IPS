@@ -6,6 +6,7 @@ Lightweight Isolation Forest model for unsupervised anomaly detection on IoT tra
 import numpy as np
 import logging
 from collections import deque
+from typing import Optional
 from sklearn.ensemble import IsolationForest
 from config import ANOMALY_CONTAMINATION, ML_FEATURE_WINDOW, ANOMALY_RETRAIN_INTERVAL
 
@@ -42,6 +43,8 @@ class AnomalyDetector:
             warm_start=False,
         )
         self.is_trained: bool = False
+        self.baseline_features: list[np.ndarray] = []
+        self._last_packet_id: Optional[str] = None
         self.training_buffer: list[np.ndarray] = []
         self.min_training_samples: int = ML_FEATURE_WINDOW
         self.samples_since_retrain: int = 0
@@ -59,10 +62,29 @@ class AnomalyDetector:
 
         # Track per-device packet rate
         dev_id = packet.source_device_id
-        now = time.time()
+        
+        # Prefer using packet timestamp for consistent rates across training & bulk replays,
+        # fallback to time.time() if packet doesn't have it.
+        if hasattr(packet, 'timestamp') and packet.timestamp is not None:
+            if hasattr(packet.timestamp, 'timestamp'):
+                now = packet.timestamp.timestamp()
+            else:
+                try:
+                    now = float(packet.timestamp)
+                except (ValueError, TypeError):
+                    now = time.time()
+        else:
+            now = time.time()
+
         if dev_id not in self._device_rates:
             self._device_rates[dev_id] = deque(maxlen=200)
-        self._device_rates[dev_id].append(now)
+            
+        # Avoid double-counting if the same packet runs through predict then incremental_update
+        pkt_id = getattr(packet, 'id', None)
+        if pkt_id is None or pkt_id != self._last_packet_id:
+            self._device_rates[dev_id].append(now)
+            if pkt_id is not None:
+                self._last_packet_id = pkt_id
         
         # Count packets in the last 1.0 second
         recent = [t for t in self._device_rates[dev_id] if now - t < 1.0]
@@ -86,6 +108,7 @@ class AnomalyDetector:
             feat = self.extract_features(pkt, rate)
             features.append(feat)
 
+        self.baseline_features = list(features)
         X = np.array(features)
         if len(X) < self.min_training_samples:
             # Buffer until we have enough samples
@@ -105,6 +128,7 @@ class AnomalyDetector:
         self.feature_stds = np.std(X, axis=0)
         self.is_trained = True
         self.samples_since_retrain = 0
+        self.training_buffer.clear()
         logger.info(f"ML Model trained on {len(X)} samples")
 
     def get_feature_contributions(self, features: np.ndarray) -> dict[str, float]:
@@ -171,11 +195,12 @@ class AnomalyDetector:
         self.samples_since_retrain += 1
 
         # Keep buffer capped to prevent memory leak
-        if len(self.training_buffer) > 1000:
-            self.training_buffer = self.training_buffer[-1000:]
+        if len(self.training_buffer) > 2000:
+            self.training_buffer = self.training_buffer[-2000:]
 
         if self.samples_since_retrain >= ANOMALY_RETRAIN_INTERVAL and len(self.training_buffer) >= self.min_training_samples:
-            X = np.array(self.training_buffer[-ANOMALY_RETRAIN_INTERVAL * 2:])
+            # Fit on baseline features merged with the new training buffer
+            X = np.array(self.baseline_features + self.training_buffer)
             self.model.fit(X)
             self.feature_means = np.mean(X, axis=0)
             self.feature_stds = np.std(X, axis=0)
@@ -185,6 +210,8 @@ class AnomalyDetector:
     def reset(self):
         """Reset the model to untrained state."""
         self.is_trained = False
+        self.baseline_features.clear()
+        self._last_packet_id = None
         self.training_buffer.clear()
         self.samples_since_retrain = 0
         self._device_rates.clear()

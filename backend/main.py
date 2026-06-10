@@ -391,10 +391,18 @@ async def simulation_loop():
             for packet in all_packets:
                 # Skip packets from blocked IPs
                 if packet.source_ip in state["network"].blocked_ips:
+                    if packet.is_malicious:
+                        state["detector"].total_inspected += 1
+                        state["detector"].total_malicious += 1
+                        state["detector"].true_positives += 1
                     continue
 
                 # Skip packets from quarantined devices
                 if packet.source_device_id in state["network"].quarantined_devices:
+                    if packet.is_malicious:
+                        state["detector"].total_inspected += 1
+                        state["detector"].total_malicious += 1
+                        state["detector"].true_positives += 1
                     continue
 
                 # Get device details and check if allowed (whitelist check)

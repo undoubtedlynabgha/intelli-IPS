@@ -104,8 +104,8 @@ const Copilot: React.FC<CopilotProps> = ({
         return 0;
       });
 
-      const alertText = sortedAlerts.slice(0, 10).length > 0
-        ? sortedAlerts.slice(0, 10).map(a => {
+      const alertText = sortedAlerts.slice(0, 25).length > 0
+        ? sortedAlerts.slice(0, 25).map(a => {
             const dev = devices.find(d => d.id === a.deviceId || d.name === a.device);
             const devName = dev ? dev.name : a.device || a.deviceId;
             const devIp = dev ? dev.ip : a.source_ip || 'N/A';
@@ -122,8 +122,8 @@ const Copilot: React.FC<CopilotProps> = ({
         return 0;
       });
 
-      const logText = sortedLogs.slice(0, 12).length > 0
-        ? sortedLogs.slice(0, 12).map(l => {
+      const logText = sortedLogs.slice(0, 30).length > 0
+        ? sortedLogs.slice(0, 30).map(l => {
             const dev = devices.find(d => d.id === l.source || d.name === l.source);
             const devName = dev ? dev.name : l.source;
             return `- [${l.timestamp}] ${l.category}: ${l.message} (Source: ${devName}, Status: ${l.status})`;
@@ -155,17 +155,18 @@ ${logText}
 
 Your response guidelines:
 1. Always maintain context of the live metrics, device list, and quarantine logs provided above.
-2. Keep your answers short, concise, and highly precise (maximum of 1-2 paragraphs or bullet points). Avoid lengthy explanations.
+2. Keep your answers short, concise, and highly precise (maximum of 1 paragraph or 3-4 bullet points). Always be brief; avoid any lengthy explanations, background history, or general tutorial information.
 3. Always write the device name *before* the device IP address (e.g., \`Front_Door_Camera\` (\`192.168.1.105\`)). Do not write the IP address before the device name under any circumstance.
 4. Reference specific device names, IPs, timestamps, and alert types.
 5. If an attack is active, analyze the vector and explain what the IPS is doing (e.g. dropping packet rates, quarantining nodes).
 6. If asked why a node is quarantined or blocked, look for it in the device registry and explain the mitigation triggers.
 7. Format code elements (IPs, MACs, ports, protocols, or actions like BLOCKED) using single backticks (e.g., \`192.168.1.50\`, \`MQTT\`).
-8. Do not include introductory filler or preambles like "Based on the live data provided...". Answer directly as an embedded security system.
+8. Do not include introductory filler, preambles, or transition text like "Based on the live data provided..." or "Here is the explanation...". Start answering the question directly as an automated embedded security system.
 9. Keep responses structured, concise, and highly professional.
 10. Do not report a device as quarantined or blocked unless its status in the [DEVICE REGISTRY] is explicitly listed as 'blocked'. If a device is in status 'online' or 'threat', it is not quarantined.
 11. When explaining the latest threat alerts, prioritize critical/high risks and blocked/quarantined devices. If any device has status 'blocked' in the registry, you must explain the alert that triggered that specific quarantine action as your primary focus.
-12. Match details from the [LATEST SYSTEM ALERTS] and [LATEST EVENT LOGS] exactly.`;
+12. Match details from the [LATEST SYSTEM ALERTS] and [LATEST EVENT LOGS] exactly.
+13. Read the LIVE TELEMETRY metrics, alerts, and registry states carefully. Do not assume or extrapolate events that are not explicitly documented in the latest alerts or logs. If an attack is active, look at its specific target and attacker in the event logs or registry status.`;
 
       const response = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
