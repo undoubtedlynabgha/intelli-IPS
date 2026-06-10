@@ -1,7 +1,16 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+        // Polyfill Node process global for SDKs like groq-sdk
+        window.process = window.process || {
+            env: { NODE_ENV: 'development' },
+            version: 'v18.0.0',
+            versions: { node: '18.0.0' },
+            platform: 'browser',
+            arch: 'x64'
+        };
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Intelli IPS - Intrusion Prevention System</title>

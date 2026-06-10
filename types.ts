@@ -38,3 +38,10 @@ export interface ChartDataPoint {
   value: number;
 }
 
+export interface CopilotMessage {
+  sender: 'user' | 'ai';
+  text: string;
+  timestamp: string;
+}
+
+

@@ -11,8 +11,9 @@ import Logs from './components/Logs';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
 import MLEvalLab from './components/MLEvalLab';
+import Copilot from './components/Copilot';
 import { DEVICES as INITIAL_DEVICES } from './constants';
-import { Device } from './types';
+import { Device, CopilotMessage } from './types';
 import { useIpsBackend } from './hooks/useIpsBackend';
 
 export interface Toast {
@@ -34,6 +35,13 @@ const AppInner: React.FC = () => {
   const [externalSelectedId, setExternalSelectedId] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([
+    {
+      sender: 'ai',
+      text: "Hello Security Analyst. I am **Intelli IPS Copilot**, your real-time security assistant. I have analyzed our live telemetry, whitelisted device registries, active logs, and quarantine database.\n\nAsk me anything about the network's health, explain recent anomalies, or check why a specific node has been isolated.",
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
 
   const {
     connected: backendConnected,
@@ -141,6 +149,13 @@ const AppInner: React.FC = () => {
         await resetSimulation();
       }
       setDevices(INITIAL_DEVICES);
+      setCopilotMessages([
+        {
+          sender: 'ai',
+          text: "Hello Security Analyst. I am **Intelli IPS Copilot**, your real-time security assistant. I have analyzed our live telemetry, whitelisted device registries, active logs, and quarantine database.\n\nAsk me anything about the network's health, explain recent anomalies, or check why a specific node has been isolated.",
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
       setCurrentTab('dashboard');
       setSearchQuery('');
       setSearchError(null);
@@ -176,6 +191,18 @@ const AppInner: React.FC = () => {
             ipsApi={ipsApi}
             backendConnected={backendConnected}
             metrics={metrics}
+          />
+        );
+      case 'copilot':
+        return (
+          <Copilot
+            devices={displayDevices}
+            alerts={alerts}
+            logs={logs}
+            metrics={metrics}
+            onNotify={addToast}
+            messages={copilotMessages}
+            setMessages={setCopilotMessages}
           />
         );
       case 'network':
@@ -261,6 +288,7 @@ const AppInner: React.FC = () => {
     switch (currentTab) {
       case 'dashboard': return 'IPS Overview';
       case 'threat-feed': return 'Prevention Feed';
+      case 'copilot': return 'Security AI Copilot';
       case 'network': return 'Network Monitor & Simulation';
       case 'alerts': return 'Prevention Action Log';
       case 'logs': return 'Event Streams';
