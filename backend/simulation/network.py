@@ -161,6 +161,7 @@ class IoTNetwork:
 
     def reset(self):
         """Reset network to initial state."""
+        self.devices.clear()
         self.blocked_ips.clear()
         self.quarantined_devices.clear()
         self._initialize_devices()
