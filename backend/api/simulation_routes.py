@@ -404,11 +404,8 @@ async def set_mode(req: ModeRequest):
     from datetime import datetime
     
     if mode == "real":
-        # Clear simulated devices and keep only Gateway
-        gw = state["network"].devices.get("GW_01")
+        # Clear simulated devices completely
         state["network"].devices = {}
-        if gw:
-            state["network"].devices["GW_01"] = gw
             
         # Log transition
         state["logs"].append(LogEntry(

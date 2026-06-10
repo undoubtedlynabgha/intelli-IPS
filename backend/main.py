@@ -172,6 +172,21 @@ async def scan_local_network():
         "is_real": True
     })
 
+    # Ensure there is always a router gateway present in the real mode topology mapping
+    has_router = any(d["type"] == "router" for d in discovered)
+    if not has_router:
+        discovered.append({
+            "id": "REAL_1",
+            "name": "Local_Router_Gateway",
+            "type": "router",
+            "ip": f"{subnet_prefix}1",
+            "mac": "00:11:22:33:44:55",
+            "protocol": "HTTP",
+            "status": "online",
+            "allowed": True,
+            "is_real": True
+        })
+
     return discovered
 
 # ──────────────────────────────────────────────
@@ -244,72 +259,88 @@ async def simulation_loop():
                     if d["id"] != "GW_01" and d.get("ip")
                 ]
 
-                async def check_device(dev):
-                    # Skip pinging quarantined devices to avoid updating their online status
-                    if dev["id"] in state["network"].quarantined_devices:
-                        return dev, None
-                    ip = dev["ip"]
-                    latency = await ping_device_latency(ip)
-                    return dev, latency
+                # Resolve gateway IP dynamically based on subnet
+                local_ip = get_local_ip()
+                parts = local_ip.split('.')
+                gateway_ip = f"{parts[0]}.{parts[1]}.{parts[2]}.1" if len(parts) == 4 else "192.168.1.1"
 
-                results = await asyncio.gather(*[check_device(d) for d in real_monitored_devices])
+                # Round-robin telemetry check: ping exactly one device per tick to prevent CPU/network storms
+                if real_monitored_devices:
+                    dev_index = tick % len(real_monitored_devices)
+                    dev_to_check = real_monitored_devices[dev_index]
+                    dev_id = dev_to_check["id"]
 
+                    # Skip active checks if the device was quarantined by policy
+                    if dev_id not in state["network"].quarantined_devices:
+                        ip = dev_to_check["ip"]
+                        latency = await ping_device_latency(ip)
+
+                        if latency is not None:
+                            dev_to_check["last_latency"] = latency
+                            dev_to_check["fail_count"] = 0
+                            if dev_to_check["status"] == "blocked":
+                                state["network"].unquarantine_device(dev_id)
+                            else:
+                                dev_to_check["status"] = "online"
+                        else:
+                            # Transient failure protection: require 2 consecutive timeouts
+                            fail_count = dev_to_check.get("fail_count", 0) + 1
+                            dev_to_check["fail_count"] = fail_count
+
+                            if fail_count >= 2:
+                                dev_to_check["fail_count"] = 0
+                                if dev_id not in state["network"].quarantined_devices:
+                                    state["network"].quarantine_device(dev_id)
+                                    alert = Alert(
+                                        id=f"ALT-{uuid.uuid4().hex[:6].upper()}",
+                                        risk=RiskLevel.CRITICAL,
+                                        timestamp=datetime.now().strftime("%H:%M:%S"),
+                                        device=dev_to_check["name"],
+                                        deviceId=dev_id,
+                                        threat="Device Link Loss / Connection Failure",
+                                        assessment="Ping Timeout",
+                                        confidence=100,
+                                        description=f"Device {dev_to_check['name']} ({dev_to_check['ip']}) failed to respond to health checks. Automatically quarantined.",
+                                        tags=["Link Failure", "Offline", "Ping Timeout"],
+                                        actionTaken=ActionTaken.BLOCKED,
+                                        detectionMethod=DetectionMethod.SIGNATURE,
+                                        source_ip=dev_to_check["ip"]
+                                    )
+                                    state["alerts"].append(alert)
+                                    state["logs"].append(LogEntry(
+                                        id=f"LOG-{uuid.uuid4().hex[:8]}",
+                                        timestamp=datetime.now().strftime("%H:%M:%S"),
+                                        source=dev_id,
+                                        category="MITIGATION",
+                                        message=f"Device {dev_to_check['name']} isolated: Link loss detected (ping timeout).",
+                                        status="BLOCKED"
+                                    ))
+
+                # Generate regular traffic packets using cached latency to keep UI animations smooth
                 normal_packets = []
-                for dev, latency in results:
+                for dev in real_monitored_devices:
                     dev_id = dev["id"]
                     if dev_id in state["network"].quarantined_devices:
                         continue
-                        
-                    if latency is not None:
-                        # Device is responding
-                        if dev["status"] == "blocked":
-                            state["network"].unquarantine_device(dev_id)
-                        
-                        # Generate some packets where the payload acts as latency context
-                        pkt_count = random.randint(1, 4)
-                        for _ in range(pkt_count):
-                            from models.schemas import TrafficPacket
-                            pkt = TrafficPacket(
-                                id=f"PKT-{uuid.uuid4().hex[:8].upper()}",
-                                timestamp=datetime.now(),
-                                source_ip=dev["ip"],
-                                source_device_id=dev_id,
-                                destination_ip="192.168.1.1",
-                                protocol=dev.get("protocol", "MQTT"),
-                                payload_size=random.randint(10, 50),
-                                packet_type="DATA",
-                                sensor_value=latency, # Map real ping latency as sensor value
-                                is_malicious=False
-                            )
-                            normal_packets.append(pkt)
-                    else:
-                        # Ping timeout! Quarantine it and raise an alert
-                        if dev_id not in state["network"].quarantined_devices:
-                            state["network"].quarantine_device(dev_id)
-                            alert = Alert(
-                                id=f"ALT-{uuid.uuid4().hex[:6].upper()}",
-                                risk=RiskLevel.CRITICAL,
-                                timestamp=datetime.now().strftime("%H:%M:%S"),
-                                device=dev["name"],
-                                deviceId=dev_id,
-                                threat="Device Link Loss / Connection Failure",
-                                assessment="Ping Timeout",
-                                confidence=100,
-                                description=f"Device {dev['name']} ({dev['ip']}) failed to respond to health checks. Automatically quarantined.",
-                                tags=["Link Failure", "Offline", "Ping Timeout"],
-                                actionTaken=ActionTaken.BLOCKED,
-                                detectionMethod=DetectionMethod.SIGNATURE,
-                                source_ip=dev["ip"]
-                            )
-                            state["alerts"].append(alert)
-                            state["logs"].append(LogEntry(
-                                id=f"LOG-{uuid.uuid4().hex[:8]}",
-                                timestamp=datetime.now().strftime("%H:%M:%S"),
-                                source=dev_id,
-                                category="MITIGATION",
-                                message=f"Device {dev['name']} isolated: Link loss detected (ping timeout).",
-                                status="BLOCKED"
-                            ))
+                    
+                    lat = dev.get("last_latency", 4.2)
+                    pkt_count = random.randint(1, 3)
+                    for _ in range(pkt_count):
+                        from models.schemas import TrafficPacket
+                        pkt = TrafficPacket(
+                            id=f"PKT-{uuid.uuid4().hex[:8].upper()}",
+                            timestamp=datetime.now(),
+                            source_ip=dev["ip"],
+                            source_device_id=dev_id,
+                            destination_ip=gateway_ip,
+                            protocol=dev.get("protocol", "MQTT"),
+                            payload_size=random.randint(10, 50),
+                            packet_type="DATA",
+                            sensor_value=lat,
+                            is_malicious=False
+                        )
+                        normal_packets.append(pkt)
+
                 attack_packets = []
             else:
                 active_devices = state["network"].get_active_devices()

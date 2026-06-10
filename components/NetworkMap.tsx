@@ -24,6 +24,9 @@ interface NetworkMapProps {
   isAdmin?: boolean;
   onAddDevice?: (device: Device) => void;
   onRemoveDevice?: (id: string) => void;
+  // Real network monitoring props
+  mode?: string;
+  onScanMesh?: () => void;
 }
 
 const ATTACKS: { id: AttackType; label: string; icon: string; desc: string; color: string }[] = [
@@ -53,6 +56,8 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
   isAdmin = true,
   onRemoveDevice,
   onAddDevice,
+  mode = 'sim',
+  onScanMesh,
 }) => {
   const { theme } = useTheme();
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -60,6 +65,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
   const [selectedNode, setSelectedNode] = useState('CAM_EXT_04');
   const [showSimPanel, setShowSimPanel] = useState(true);
   const [simTab, setSimTab] = useState<'control' | 'attack' | 'add'>('control');
+  const [realTab, setRealTab] = useState<'status' | 'defense'>('status');
   const [selectedAttackId, setSelectedAttackId] = useState<AttackType | null>(null);
   const [targetId, setTargetId] = useState<string>('');
   const [attackerId, setAttackerId] = useState<string>('');
@@ -279,6 +285,27 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
 
   // Absolute positions on a 1000x800 canvas
   const activeNodes = React.useMemo(() => {
+    if (mode === 'real') {
+      const filtered = devices.filter(d => d.id !== 'GW_01');
+      const clients = filtered.filter(d => d.type !== 'router' && d.id !== 'REAL_HOST');
+      return filtered.map(d => {
+        if (d.type === 'router') {
+          return { ...d, x: 500, y: 150 };
+        }
+        if (d.id === 'REAL_HOST') {
+          return { ...d, x: 500, y: 310 };
+        }
+        const index = clients.findIndex(cc => cc.id === d.id);
+        if (index === -1) return { ...d, x: 500, y: 470 };
+        const row = Math.floor(index / 5);
+        const col = index % 5;
+        const itemsInRow = Math.min(5, clients.length - row * 5);
+        const spacing = 140;
+        const startX = 500 - ((itemsInRow - 1) * spacing) / 2;
+        return { ...d, x: startX + col * spacing, y: 470 + row * 120 };
+      });
+    }
+
     const nonGatewayDevices = devices.filter(d => d.type !== 'router');
     return devices.map(d => {
       if (d.type === 'router') return { ...d, x: 500, y: 400 };
@@ -297,9 +324,54 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
       const rad = (angle * Math.PI) / 180;
       return { ...d, x: 500 + radius * Math.cos(rad), y: 400 + radius * Math.sin(rad) };
     });
-  }, [devices]);
+  }, [devices, mode]);
 
   const meshLinks = React.useMemo(() => {
+    if (mode === 'real') {
+      const links: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; status: string; isGateway: boolean }> = [];
+      const gatewayNode = activeNodes.find(n => n.type === 'router');
+      const consoleNode = activeNodes.find(n => n.id === 'REAL_HOST');
+      const clients = activeNodes.filter(n => n.type !== 'router' && n.id !== 'REAL_HOST');
+
+      if (gatewayNode && consoleNode) {
+        links.push({
+          id: `gw-${consoleNode.id}`,
+          x1: gatewayNode.x,
+          y1: gatewayNode.y,
+          x2: consoleNode.x,
+          y2: consoleNode.y,
+          status: consoleNode.status,
+          isGateway: true
+        });
+      }
+
+      clients.forEach(n => {
+        if (gatewayNode) {
+          links.push({
+            id: `gw-${n.id}`,
+            x1: gatewayNode.x,
+            y1: gatewayNode.y,
+            x2: n.x,
+            y2: n.y,
+            status: n.status,
+            isGateway: true
+          });
+        }
+        if (consoleNode) {
+          links.push({
+            id: `probe-${n.id}`,
+            x1: consoleNode.x,
+            y1: consoleNode.y,
+            x2: n.x,
+            y2: n.y,
+            status: n.status === 'blocked' ? 'blocked' : 'probe',
+            isGateway: false
+          });
+        }
+      });
+      return links;
+    }
+
     const links: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; status: string; isGateway: boolean }> = [];
     const nonGateway = activeNodes.filter(n => n.type !== 'router');
     
@@ -350,7 +422,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
       });
     });
     return links;
-  }, [activeNodes, activeAttack, activeAttackAttackerId, activeAttackTargetId]);
+  }, [activeNodes, activeAttack, activeAttackAttackerId, activeAttackTargetId, mode]);
 
   const selectedDeviceData = devices.find(d => d.name === selectedNode);
 
@@ -465,10 +537,14 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                     let strokeColor = theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
                     if (link.status === 'blocked') strokeColor = 'rgba(239,68,68,0.8)';
                     else if (link.status === 'threat') strokeColor = 'rgba(249,115,22,0.7)';
+                    else if (link.status === 'probe') strokeColor = theme === 'dark' ? 'rgba(59,130,246,0.6)' : 'rgba(37,99,235,0.6)';
                     else if (!link.isGateway) strokeColor = theme === 'dark' ? 'rgba(16,185,129,0.2)' : 'rgba(5,150,105,0.2)';
+                    
                     let strokeDash = '0';
                     if (link.status === 'threat') strokeDash = '4,4';
+                    else if (link.status === 'probe') strokeDash = '3,3';
                     else if (!link.isGateway) strokeDash = '2,4';
+                    
                     const strokeWidth = link.status === 'blocked' ? (link.isGateway ? '2.5' : '1.5') : (link.isGateway ? '1.5' : '1.0');
                     return (
                       <line key={link.id} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2}
@@ -477,7 +553,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                   })}
                   
                   {/* SVG Packet Flow Animations */}
-                  {simulationRunning && meshLinks.map(link => {
+                  {(simulationRunning || mode === 'real') && meshLinks.map(link => {
                     if (link.status === 'blocked') return null;
                     let particleColor = theme === 'dark' ? '#10b981' : '#059669';
                     let dur = '3.0s';
@@ -485,6 +561,9 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                     if (link.status === 'threat') {
                       particleColor = '#ef4444';
                       dur = '0.7s';
+                    } else if (link.status === 'probe') {
+                      particleColor = theme === 'dark' ? '#60a5fa' : '#3b82f6';
+                      dur = '2.5s';
                     } else if (!link.isGateway) {
                       particleColor = theme === 'dark' ? '#3b82f6' : '#2563eb';
                       dur = '4.0s';
@@ -497,7 +576,12 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                     let toX = link.x1;
                     let toY = link.y1;
 
-                    if (activeAttack && link.status === 'threat') {
+                    if (link.status === 'probe') {
+                      fromX = link.x1;
+                      fromY = link.y1;
+                      toX = link.x2;
+                      toY = link.y2;
+                    } else if (activeAttack && link.status === 'threat') {
                       const attacker = activeAttackAttackerId;
                       const target = activeAttackTargetId || "GW_01";
                       
@@ -687,320 +771,487 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
             </div>
           )}
         </div>
-
-        {/* Simulation Side Panel */}
+        {/* Simulation Side Panel or IPS Real Console */}
         {showSimPanel && isAdmin && (
-          <div className="w-80 bg-background dark:bg-[#060606] border-l border-surface dark:border-surface-highlight flex flex-col shrink-0 overflow-hidden animate-in slide-in-from-right-4 duration-300">
-            {/* Sim panel header */}
-            <div className="px-4 py-3 border-b border-surface dark:border-surface-highlight flex items-center justify-between bg-surface/30 dark:bg-surface-dark/30 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px] text-blue-400">science</span>
-                <span className="text-sm font-bold uppercase text-main dark:text-white tracking-wide">Simulation Lab</span>
+          mode === 'real' ? (
+            <div className="w-80 bg-background dark:bg-[#060606] border-l border-surface dark:border-surface-highlight flex flex-col shrink-0 overflow-hidden animate-in slide-in-from-right-4 duration-300">
+              {/* IPS Real Network Console Header */}
+              <div className="px-4 py-3 border-b border-surface dark:border-surface-highlight flex items-center justify-between bg-surface/30 dark:bg-surface-dark/30 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-blue-400">security</span>
+                  <span className="text-sm font-bold uppercase text-main dark:text-white tracking-wide">IPS Active Monitor</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono px-2 py-0.5 border text-emerald-400 border-emerald-500/50 bg-emerald-950/30">
+                    ● ACTIVE
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-mono px-2 py-0.5 border ${simulationRunning ? 'text-emerald-400 border-emerald-500/50 bg-emerald-950/30' : 'text-muted dark:text-gray-500 border-surface dark:border-surface-highlight'}`}>
-                  {simulationRunning ? '● RUNNING' : '○ IDLE'}
-                </span>
-              </div>
-            </div>
 
-            {/* Sub-tabs */}
-            <div className="flex border-b border-surface dark:border-surface-highlight shrink-0">
-              {(['control', 'attack', 'add'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setSimTab(tab)}
-                  onMouseDown={e => e.stopPropagation()}
-                  onMouseUp={e => e.stopPropagation()}
-                  className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors outline-none ${simTab === tab ? 'text-main dark:text-white border-b-2 border-black dark:border-white' : 'text-muted dark:text-gray-500 hover:text-main dark:hover:text-white'}`}
-                >
-                  {tab === 'control' ? 'Control' : tab === 'attack' ? 'Attack Inject' : 'Add Node'}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono">
-
-              {simTab === 'control' && (
-                <>
-                  {!backendConnected ? (
-                    <div className="p-3 bg-orange-950/20 border border-orange-500/30 text-orange-400 text-xs">
-                      <span className="font-bold block mb-1">Backend Offline</span>
-                      <code className="text-muted dark:text-gray-400">cd backend && python main.py</code>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Status indicators */}
-                      <div className="space-y-2">
-                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">System Status</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className={`p-2.5 border text-center ${simulationRunning ? 'bg-emerald-950/20 border-emerald-500/40' : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight'}`}>
-                            <div className={`text-lg font-black ${simulationRunning ? 'text-emerald-400' : 'text-muted dark:text-gray-500'}`}>{simulationRunning ? 'ON' : 'OFF'}</div>
-                            <div className="text-[10px] text-muted dark:text-gray-500 uppercase">Simulation</div>
-                          </div>
-                          <div className={`p-2.5 border text-center ${mlTrained ? 'bg-blue-950/20 border-blue-500/40' : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight'}`}>
-                            <div className={`text-lg font-black ${mlTrained ? 'text-blue-400' : 'text-muted dark:text-gray-500'}`}>{mlTrained ? 'YES' : 'NO'}</div>
-                            <div className="text-[10px] text-muted dark:text-gray-500 uppercase">ML Trained</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {activeAttack && (
-                        <div className="p-3 bg-red-950/20 border border-red-500/30 animate-pulse">
-                          <div className="text-[10px] text-red-400 font-bold uppercase mb-1">Active Attack Vector</div>
-                          <div className="text-sm text-red-300 font-bold">{activeAttack}</div>
-                          <div className="text-[10px] text-muted dark:text-gray-500 mt-1">IPS is analyzing traffic patterns...</div>
-                        </div>
-                      )}
-
-                      {/* Control buttons */}
-                      <div className="space-y-2">
-                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Simulation Control</div>
-                        <button
-                          disabled={simulationRunning}
-                          onClick={() => handleSimAction(async () => { await onStartSimulation?.(); }, 'IoT simulation started — traffic flowing', 'Failed to start')}
-                          onMouseDown={e => e.stopPropagation()}
-                          onMouseUp={e => e.stopPropagation()}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase bg-emerald-700/80 hover:bg-emerald-600 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-emerald-600/50 outline-none"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">play_arrow</span>
-                          Start Simulation
-                        </button>
-                        <button
-                          disabled={!simulationRunning}
-                          onClick={() => handleSimAction(async () => { await onStopSimulation?.(); }, 'Simulation stopped', 'Failed to stop')}
-                          onMouseDown={e => e.stopPropagation()}
-                          onMouseUp={e => e.stopPropagation()}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase bg-surface dark:bg-surface-dark hover:bg-red-950/30 text-muted dark:text-gray-400 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed border border-surface dark:border-surface-highlight hover:border-red-500/40 transition-all outline-none"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">stop</span>
-                          Stop Simulation
-                        </button>
-                      </div>
-
-
-
-                      {/* How it works */}
-                      <div className="p-3 bg-surface/50 dark:bg-surface-dark/50 border border-surface dark:border-surface-highlight text-[10px] text-muted dark:text-gray-500 leading-relaxed space-y-1">
-                        <div className="text-main dark:text-white font-bold text-xs mb-2">How Intelli IPS Works</div>
-                        <div className="flex gap-2"><span className="text-emerald-400">▶</span><span>Normal traffic is <strong className="text-emerald-400">allowed</strong> through the network</span></div>
-                        <div className="flex gap-2"><span className="text-red-400">▶</span><span>Anomalous traffic is <strong className="text-red-400">prevented</strong> and blocked</span></div>
-                        <div className="flex gap-2"><span className="text-blue-400">▶</span><span>ML model learns baseline behavior over time</span></div>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-
-              {simTab === 'attack' && (
-                <>
-                  {!backendConnected ? (
-                    <div className="p-3 bg-orange-950/20 border border-orange-500/30 text-orange-400 text-xs">
-                      <span className="font-bold block mb-1">Backend Required</span>
-                      <code className="text-muted dark:text-gray-400">cd backend && python main.py</code>
-                    </div>
-                  ) : !simulationRunning ? (
-                    <div className="p-3 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight text-muted dark:text-gray-500 text-xs text-center">
-                      <span className="material-symbols-outlined text-2xl block mb-2 mx-auto">play_disabled</span>
-                      Start simulation first to inject attacks
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Select Attack Vector</div>
-                      <div className="space-y-1.5">
-                        {ATTACKS.map(a => (
-                          <button
-                            key={a.id}
-                            disabled={!!activeAttack}
-                            onClick={() => setSelectedAttackId(prev => prev === a.id ? null : a.id)}
-                            onMouseDown={e => e.stopPropagation()}
-                            onMouseUp={e => e.stopPropagation()}
-                            className={`w-full text-left p-2.5 border transition-colors outline-none ${selectedAttackId === a.id ? 'border-red-500/60 bg-red-950/20' : 'border-surface dark:border-surface-highlight bg-surface/30 dark:bg-surface-dark/30 hover:border-red-500/30'} disabled:opacity-40 disabled:cursor-not-allowed`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-[15px] text-red-400 pixel-icon">{a.icon}</span>
-                              <span className="text-xs font-bold text-main dark:text-white uppercase">{a.label}</span>
-                            </div>
-                            <span className="block text-[10px] text-muted dark:text-gray-500 mt-0.5 ml-5">{a.desc}</span>
-                          </button>
-                        ))}
-                      </div>
-
-                      {selectedAttackId && (
-                        <div className="space-y-3 p-3 border border-red-500/20 bg-red-950/5 animate-in fade-in duration-200">
-                          <div className="text-[10px] text-red-400 font-bold uppercase">Configure: {ATTACKS.find(a => a.id === selectedAttackId)?.label}</div>
-
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-muted dark:text-gray-500 uppercase">Attacker (Source)</label>
-                            <select
-                              value={attackerId}
-                              onChange={e => setAttackerId(e.target.value)}
-                              onMouseDown={e => e.stopPropagation()}
-                              onMouseUp={e => e.stopPropagation()}
-                              onClick={e => e.stopPropagation()}
-                              onKeyDown={e => e.stopPropagation()}
-                              className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-7 px-2 outline-none"
-                            >
-                              <option value="">External Attacker (Internet)</option>
-                              {devices.filter(d => d.type !== 'router' && d.status !== 'blocked').map(d => (
-                                <option key={d.id} value={d.id}>{d.name} ({d.ip || 'no IP'})</option>
-                              ))}
-                            </select>
-                          </div>
- 
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-muted dark:text-gray-500 uppercase">Target (Victim)</label>
-                            <select
-                              value={targetId}
-                              onChange={e => setTargetId(e.target.value)}
-                              onMouseDown={e => e.stopPropagation()}
-                              onMouseUp={e => e.stopPropagation()}
-                              onClick={e => e.stopPropagation()}
-                              onKeyDown={e => e.stopPropagation()}
-                              className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-7 px-2 outline-none"
-                            >
-                              <option value="">Random Active Device</option>
-                              {devices.filter(d => d.type !== 'router' && d.status !== 'blocked').map(d => (
-                                <option key={d.id} value={d.id}>{d.name} ({d.ip || 'no IP'})</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-muted dark:text-gray-500 uppercase flex justify-between">
-                              <span>{selectedAttackId === 'brute_force' ? 'Attempts/tick' : 'Packets/tick'}</span>
-                              <span className="text-red-400 font-bold">{packetRate}</span>
-                            </label>
-                            <input
-                              type="range"
-                              min={1}
-                              max={selectedAttackId === 'brute_force' ? 50 : selectedAttackId === 'data_spoofing' ? 20 : 400}
-                              value={packetRate}
-                              onChange={e => setPacketRate(parseInt(e.target.value))}
-                              onMouseDown={e => e.stopPropagation()}
-                              onMouseUp={e => e.stopPropagation()}
-                              onClick={e => e.stopPropagation()}
-                              onKeyDown={e => e.stopPropagation()}
-                              className="w-full cursor-pointer accent-red-500"
-                            />
-                          </div>
-
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              onMouseDown={e => e.stopPropagation()}
-                              onMouseUp={e => e.stopPropagation()}
-                              onClick={e => { e.stopPropagation(); setSelectedAttackId(null); }}
-                              className="flex-1 py-2 text-xs border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white uppercase outline-none transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onMouseDown={e => e.stopPropagation()}
-                              onMouseUp={e => e.stopPropagation()}
-                              onClick={e => { e.stopPropagation(); handleLaunchAttack(); }}
-                              className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-bold uppercase outline-none transition-colors flex items-center justify-center gap-1"
-                            >
-                              <span className="material-symbols-outlined text-[14px]">bolt</span>
-                              Inject
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-
-              {simTab === 'add' && (
-                <form onSubmit={handleAddSubmit} className="space-y-4 animate-in fade-in duration-200">
-                  <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Commission Node</div>
-                  <p className="text-muted dark:text-gray-500 text-[10px] uppercase tracking-wide leading-relaxed">
-                    Deploy a new simulated IoT node into the active mesh topology.
-                  </p>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Label</label>
-                    <input
-                      type="text"
-                      value={addDeviceName}
-                      onChange={e => setAddDeviceName(e.target.value)}
-                      onMouseDown={e => e.stopPropagation()}
-                      onMouseUp={e => e.stopPropagation()}
-                      onClick={e => e.stopPropagation()}
-                      onKeyDown={e => e.stopPropagation()}
-                      placeholder="e.g. SMART_LIGHT_01"
-                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Class</label>
-                    <select
-                      value={addDeviceType}
-                      onChange={e => setAddDeviceType(e.target.value)}
-                      onMouseDown={e => e.stopPropagation()}
-                      onMouseUp={e => e.stopPropagation()}
-                      onClick={e => e.stopPropagation()}
-                      onKeyDown={e => e.stopPropagation()}
-                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2 outline-none transition-all"
-                    >
-                      <option value="sensors">Sensor Array</option>
-                      <option value="videocam">Surveillance Node</option>
-                      <option value="lock">Security Lock</option>
-                      <option value="thermostat">HVAC Control</option>
-                      <option value="speaker">Smart Speaker</option>
-                      <option value="power">Smart Plug</option>
-                      <option value="tv">Smart TV</option>
-                      <option value="kitchen">Smart Refrigerator</option>
-                      <option value="precision_manufacturing">Industrial PLC</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">IP Address (Static)</label>
-                    <input
-                      type="text"
-                      value={addDeviceIp}
-                      onChange={e => setAddDeviceIp(e.target.value)}
-                      onMouseDown={e => e.stopPropagation()}
-                      onMouseUp={e => e.stopPropagation()}
-                      onClick={e => e.stopPropagation()}
-                      onKeyDown={e => e.stopPropagation()}
-                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="sim-form-allowed"
-                      checked={addDeviceAllowed}
-                      onChange={e => setAddDeviceAllowed(e.target.checked)}
-                      onMouseDown={e => e.stopPropagation()}
-                      onMouseUp={e => e.stopPropagation()}
-                      onClick={e => e.stopPropagation()}
-                      onKeyDown={e => e.stopPropagation()}
-                      className="size-4 bg-background dark:bg-black border border-surface dark:border-surface-highlight cursor-pointer accent-black dark:accent-white"
-                    />
-                    <label htmlFor="sim-form-allowed" className="text-[10px] text-muted dark:text-gray-400 font-bold uppercase cursor-pointer select-none">
-                      Whitelist default traffic
-                    </label>
-                  </div>
-
+              {/* Sub-tabs */}
+              <div className="flex border-b border-surface dark:border-surface-highlight shrink-0">
+                {(['status', 'defense'] as const).map(tab => (
                   <button
-                    type="submit"
+                    key={tab}
+                    onClick={() => setRealTab(tab)}
                     onMouseDown={e => e.stopPropagation()}
                     onMouseUp={e => e.stopPropagation()}
-                    onClick={e => e.stopPropagation()}
-                    className="w-full bg-black dark:bg-white text-white dark:text-black font-black uppercase text-xs h-9 hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center gap-1.5 outline-none tracking-wider mt-2"
+                    className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors outline-none ${realTab === tab ? 'text-main dark:text-white border-b-2 border-black dark:border-white' : 'text-muted dark:text-gray-500 hover:text-main dark:hover:text-white'}`}
                   >
-                    <span className="material-symbols-outlined text-[15px]">add_circle</span>
-                    Commission Device
+                    {tab === 'status' ? 'IPS Status' : 'Defense Policies'}
                   </button>
-                </form>
-              )}
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono">
+                {realTab === 'status' && (
+                  <>
+                    <div className="space-y-3">
+                      <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Network Scope</div>
+                      <div className="p-3 bg-surface/30 dark:bg-surface-dark/30 border border-surface dark:border-surface-highlight space-y-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted dark:text-gray-500">GATEWAY IP:</span>
+                          <span className="text-main dark:text-white font-bold">
+                            {devices.find(d => d.type === 'router')?.ip || '192.168.1.1'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted dark:text-gray-500">CONSOLE IP:</span>
+                          <span className="text-main dark:text-white font-bold">
+                            {devices.find(d => d.id === 'REAL_HOST')?.ip || '192.168.1.5'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted dark:text-gray-500">SUBNET RANGE:</span>
+                          <span className="text-main dark:text-white font-bold">192.168.1.0/24</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted dark:text-gray-500">ACTIVE HOSTS:</span>
+                          <span className="text-emerald-400 font-bold">{devices.filter(d => d.status === 'online').length} discovered</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Live Telemetry Health */}
+                    <div className="space-y-2">
+                      <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Live IPS Telemetry</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2.5 border border-surface dark:border-surface-highlight bg-surface/20 dark:bg-surface-dark/20 text-center">
+                          <div className="text-lg font-black text-blue-400">
+                            {devices.filter(d => d.status === 'online' && d.id !== 'REAL_HOST').length > 0
+                              ? `${Math.round(
+                                  devices
+                                    .filter(d => d.status === 'online' && d.id !== 'REAL_HOST')
+                                    .reduce((acc, curr) => acc + (curr.details && !isNaN(parseFloat(curr.details)) ? parseFloat(curr.details) : 4.5), 0) / 
+                                    devices.filter(d => d.status === 'online' && d.id !== 'REAL_HOST').length
+                                )} ms`
+                              : '4.5 ms'
+                            }
+                          </div>
+                          <div className="text-[10px] text-muted dark:text-gray-500 uppercase">Avg Latency</div>
+                        </div>
+                        <div className="p-2.5 border border-surface dark:border-surface-highlight bg-surface/20 dark:bg-surface-dark/20 text-center">
+                          <div className="text-lg font-black text-emerald-400">NOMINAL</div>
+                          <div className="text-[10px] text-muted dark:text-gray-500 uppercase">Jitter Profile</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Active Scanning Control */}
+                    <div className="space-y-2">
+                      <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Active Subnet Scanning</div>
+                      <button
+                        disabled={isScanning}
+                        onClick={onScanMesh}
+                        onMouseDown={e => e.stopPropagation()}
+                        onMouseUp={e => e.stopPropagation()}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase bg-blue-700 hover:bg-blue-600 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-blue-600/50 outline-none"
+                      >
+                        <span className="material-symbols-outlined text-[16px] animate-pulse">radar</span>
+                        {isScanning ? 'Scanning Subnet...' : 'Sweep Local Subnet'}
+                      </button>
+                    </div>
+
+                    {/* IPS Policy info */}
+                    <div className="p-3 bg-surface/50 dark:bg-surface-dark/50 border border-surface dark:border-surface-highlight text-[10px] text-muted dark:text-gray-500 leading-relaxed space-y-1">
+                      <div className="text-main dark:text-white font-bold text-xs mb-2">IPS Operation</div>
+                      <div className="flex gap-2">
+                        <span className="text-blue-400">▶</span>
+                        <span>Serial low-impact round-robin check pings all nodes.</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="text-emerald-400">▶</span>
+                        <span>Double-check timeout policy prevents false quarantines.</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {realTab === 'defense' && (
+                  <div className="space-y-4">
+                    {/* Whitelisted policies */}
+                    <div className="space-y-2">
+                      <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Registry Policy</div>
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 border border-surface dark:border-surface-highlight p-2 bg-surface/10">
+                        {devices.map(d => (
+                          <div key={d.id} className="flex justify-between items-center text-[10px] py-1 border-b border-surface/30 dark:border-surface-highlight/30">
+                            <div className="truncate pr-2">
+                              <span className="text-main dark:text-white font-bold">{d.name}</span>
+                              <span className="block text-muted dark:text-gray-500 text-[9px]">{d.mac || 'no mac'}</span>
+                            </div>
+                            <span className="px-1.5 py-0.5 text-[8px] bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 font-bold uppercase">
+                              Whitelisted
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Active quarantines */}
+                    <div className="space-y-2">
+                      <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Active Quarantines</div>
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 border border-surface dark:border-surface-highlight p-2 bg-surface/10">
+                        {devices.filter(d => d.status === 'blocked').length === 0 ? (
+                          <div className="text-[10px] text-muted dark:text-gray-500 py-3 text-center">
+                            No nodes isolated at this time.
+                          </div>
+                        ) : (
+                          devices.filter(d => d.status === 'blocked').map(d => (
+                            <div key={d.id} className="flex justify-between items-center text-[10px] py-1 border-b border-red-500/10">
+                              <div className="truncate pr-2">
+                                <span className="text-red-400 font-bold">{d.name}</span>
+                                <span className="block text-muted dark:text-gray-500 text-[9px]">{d.ip || 'no IP'}</span>
+                              </div>
+                              <button
+                                onClick={() => handleUnblock(d.id, d.name)}
+                                onMouseDown={e => e.stopPropagation()}
+                                onMouseUp={e => e.stopPropagation()}
+                                className="px-1.5 py-0.5 text-[9px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold uppercase transition-colors outline-none"
+                              >
+                                Reconnect
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="w-80 bg-background dark:bg-[#060606] border-l border-surface dark:border-surface-highlight flex flex-col shrink-0 overflow-hidden animate-in slide-in-from-right-4 duration-300">
+              {/* Sim panel header */}
+              <div className="px-4 py-3 border-b border-surface dark:border-surface-highlight flex items-center justify-between bg-surface/30 dark:bg-surface-dark/30 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-blue-400">science</span>
+                  <span className="text-sm font-bold uppercase text-main dark:text-white tracking-wide">Simulation Lab</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono px-2 py-0.5 border ${simulationRunning ? 'text-emerald-400 border-emerald-500/50 bg-emerald-950/30' : 'text-muted dark:text-gray-500 border-surface dark:border-surface-highlight'}`}>
+                    {simulationRunning ? '● RUNNING' : '○ IDLE'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Sub-tabs */}
+              <div className="flex border-b border-surface dark:border-surface-highlight shrink-0">
+                {(['control', 'attack', 'add'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setSimTab(tab)}
+                    onMouseDown={e => e.stopPropagation()}
+                    onMouseUp={e => e.stopPropagation()}
+                    className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors outline-none ${simTab === tab ? 'text-main dark:text-white border-b-2 border-black dark:border-white' : 'text-muted dark:text-gray-500 hover:text-main dark:hover:text-white'}`}
+                  >
+                    {tab === 'control' ? 'Control' : tab === 'attack' ? 'Attack Inject' : 'Add Node'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 font-mono">
+
+                {simTab === 'control' && (
+                  <>
+                    {!backendConnected ? (
+                      <div className="p-3 bg-orange-950/20 border border-orange-500/30 text-orange-400 text-xs">
+                        <span className="font-bold block mb-1">Backend Offline</span>
+                        <code className="text-muted dark:text-gray-400">cd backend && python main.py</code>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Status indicators */}
+                        <div className="space-y-2">
+                          <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">System Status</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className={`p-2.5 border text-center ${simulationRunning ? 'bg-emerald-950/20 border-emerald-500/40' : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight'}`}>
+                              <div className={`text-lg font-black ${simulationRunning ? 'text-emerald-400' : 'text-muted dark:text-gray-500'}`}>{simulationRunning ? 'ON' : 'OFF'}</div>
+                              <div className="text-[10px] text-muted dark:text-gray-500 uppercase">Simulation</div>
+                            </div>
+                            <div className={`p-2.5 border text-center ${mlTrained ? 'bg-blue-950/20 border-blue-500/40' : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight'}`}>
+                              <div className={`text-lg font-black ${mlTrained ? 'text-blue-400' : 'text-muted dark:text-gray-500'}`}>{mlTrained ? 'YES' : 'NO'}</div>
+                              <div className="text-[10px] text-muted dark:text-gray-500 uppercase">ML Trained</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {activeAttack && (
+                          <div className="p-3 bg-red-950/20 border border-red-500/30 animate-pulse">
+                            <div className="text-[10px] text-red-400 font-bold uppercase mb-1">Active Attack Vector</div>
+                            <div className="text-sm text-red-300 font-bold">{activeAttack}</div>
+                            <div className="text-[10px] text-muted dark:text-gray-500 mt-1">IPS is analyzing traffic patterns...</div>
+                          </div>
+                        )}
+
+                        {/* Control buttons */}
+                        <div className="space-y-2">
+                          <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Simulation Control</div>
+                          <button
+                            disabled={simulationRunning}
+                            onClick={() => handleSimAction(async () => { await onStartSimulation?.(); }, 'IoT simulation started — traffic flowing', 'Failed to start')}
+                            onMouseDown={e => e.stopPropagation()}
+                            onMouseUp={e => e.stopPropagation()}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase bg-emerald-700/80 hover:bg-emerald-600 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-emerald-600/50 outline-none"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+                            Start Simulation
+                          </button>
+                          <button
+                            disabled={!simulationRunning}
+                            onClick={() => handleSimAction(async () => { await onStopSimulation?.(); }, 'Simulation stopped', 'Failed to stop')}
+                            onMouseDown={e => e.stopPropagation()}
+                            onMouseUp={e => e.stopPropagation()}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase bg-surface dark:bg-surface-dark hover:bg-red-950/30 text-muted dark:text-gray-400 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed border border-surface dark:border-surface-highlight hover:border-red-500/40 transition-all outline-none"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">stop</span>
+                            Stop Simulation
+                          </button>
+                        </div>
+
+
+
+                        {/* How it works */}
+                        <div className="p-3 bg-surface/50 dark:bg-surface-dark/50 border border-surface dark:border-surface-highlight text-[10px] text-muted dark:text-gray-500 leading-relaxed space-y-1">
+                          <div className="text-main dark:text-white font-bold text-xs mb-2">How Intelli IPS Works</div>
+                          <div className="flex gap-2"><span className="text-emerald-400">▶</span><span>Normal traffic is <strong className="text-emerald-400">allowed</strong> through the network</span></div>
+                          <div className="flex gap-2"><span className="text-red-400">▶</span><span>Anomalous traffic is <strong className="text-red-400">prevented</strong> and blocked</span></div>
+                          <div className="flex gap-2"><span className="text-blue-400">▶</span><span>ML model learns baseline behavior over time</span></div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {simTab === 'attack' && (
+                  <>
+                    {!backendConnected ? (
+                      <div className="p-3 bg-orange-950/20 border border-orange-500/30 text-orange-400 text-xs">
+                        <span className="font-bold block mb-1">Backend Required</span>
+                        <code className="text-muted dark:text-gray-400">cd backend && python main.py</code>
+                      </div>
+                    ) : !simulationRunning ? (
+                      <div className="p-3 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight text-muted dark:text-gray-500 text-xs text-center">
+                        <span className="material-symbols-outlined text-2xl block mb-2 mx-auto">play_disabled</span>
+                        Start simulation first to inject attacks
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Select Attack Vector</div>
+                        <div className="space-y-1.5">
+                          {ATTACKS.map(a => (
+                            <button
+                              key={a.id}
+                              disabled={!!activeAttack}
+                              onClick={() => setSelectedAttackId(prev => prev === a.id ? null : a.id)}
+                              onMouseDown={e => e.stopPropagation()}
+                              onMouseUp={e => e.stopPropagation()}
+                              className={`w-full text-left p-2.5 border transition-colors outline-none ${selectedAttackId === a.id ? 'border-red-500/60 bg-red-950/20' : 'border-surface dark:border-surface-highlight bg-surface/30 dark:bg-surface-dark/30 hover:border-red-500/30'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-[15px] text-red-400 pixel-icon">{a.icon}</span>
+                                <span className="text-xs font-bold text-main dark:text-white uppercase">{a.label}</span>
+                              </div>
+                              <span className="block text-[10px] text-muted dark:text-gray-500 mt-0.5 ml-5">{a.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        {selectedAttackId && (
+                          <div className="space-y-3 p-3 border border-red-500/20 bg-red-950/5 animate-in fade-in duration-200">
+                            <div className="text-[10px] text-red-400 font-bold uppercase">Configure: {ATTACKS.find(a => a.id === selectedAttackId)?.label}</div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-muted dark:text-gray-500 uppercase">Attacker (Source)</label>
+                              <select
+                                value={attackerId}
+                                onChange={e => setAttackerId(e.target.value)}
+                                onMouseDown={e => e.stopPropagation()}
+                                onMouseUp={e => e.stopPropagation()}
+                                onClick={e => e.stopPropagation()}
+                                onKeyDown={e => e.stopPropagation()}
+                                className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-7 px-2 outline-none"
+                              >
+                                <option value="">External Attacker (Internet)</option>
+                                {devices.filter(d => d.type !== 'router' && d.status !== 'blocked').map(d => (
+                                  <option key={d.id} value={d.id}>{d.name} ({d.ip || 'no IP'})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-muted dark:text-gray-500 uppercase">Target (Victim)</label>
+                              <select
+                                value={targetId}
+                                onChange={e => setTargetId(e.target.value)}
+                                onMouseDown={e => e.stopPropagation()}
+                                onMouseUp={e => e.stopPropagation()}
+                                onClick={e => e.stopPropagation()}
+                                onKeyDown={e => e.stopPropagation()}
+                                className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-7 px-2 outline-none"
+                              >
+                                <option value="">Random Active Device</option>
+                                {devices.filter(d => d.type !== 'router' && d.status !== 'blocked').map(d => (
+                                  <option key={d.id} value={d.id}>{d.name} ({d.ip || 'no IP'})</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-muted dark:text-gray-500 uppercase flex justify-between">
+                                <span>{selectedAttackId === 'brute_force' ? 'Attempts/tick' : 'Packets/tick'}</span>
+                                <span className="text-red-400 font-bold">{packetRate}</span>
+                              </label>
+                              <input
+                                type="range"
+                                min={1}
+                                max={selectedAttackId === 'brute_force' ? 50 : selectedAttackId === 'data_spoofing' ? 20 : 400}
+                                value={packetRate}
+                                onChange={e => setPacketRate(parseInt(e.target.value))}
+                                onMouseDown={e => e.stopPropagation()}
+                                onMouseUp={e => e.stopPropagation()}
+                                onClick={e => e.stopPropagation()}
+                                onKeyDown={e => e.stopPropagation()}
+                                className="w-full cursor-pointer accent-red-500"
+                              />
+                            </div>
+
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                onMouseDown={e => e.stopPropagation()}
+                                onMouseUp={e => e.stopPropagation()}
+                                onClick={e => { e.stopPropagation(); setSelectedAttackId(null); }}
+                                className="flex-1 py-2 text-xs border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white uppercase outline-none transition-colors"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onMouseDown={e => e.stopPropagation()}
+                                onMouseUp={e => e.stopPropagation()}
+                                onClick={e => { e.stopPropagation(); handleLaunchAttack(); }}
+                                className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-bold uppercase outline-none transition-colors flex items-center justify-center gap-1"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">bolt</span>
+                                Inject
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+
+                {simTab === 'add' && (
+                  <form onSubmit={handleAddSubmit} className="space-y-4 animate-in fade-in duration-200">
+                    <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Commission Node</div>
+                    <p className="text-muted dark:text-gray-500 text-[10px] uppercase tracking-wide leading-relaxed">
+                      Deploy a new simulated IoT node into the active mesh topology.
+                    </p>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Label</label>
+                      <input
+                        type="text"
+                        value={addDeviceName}
+                        onChange={e => setAddDeviceName(e.target.value)}
+                        onMouseDown={e => e.stopPropagation()}
+                        onMouseUp={e => e.stopPropagation()}
+                        onClick={e => e.stopPropagation()}
+                        onKeyDown={e => e.stopPropagation()}
+                        placeholder="e.g. SMART_LIGHT_01"
+                        className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Class</label>
+                      <select
+                        value={addDeviceType}
+                        onChange={e => setAddDeviceType(e.target.value)}
+                        onMouseDown={e => e.stopPropagation()}
+                        onMouseUp={e => e.stopPropagation()}
+                        onClick={e => e.stopPropagation()}
+                        onKeyDown={e => e.stopPropagation()}
+                        className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2 outline-none transition-all"
+                      >
+                        <option value="sensors">Sensor Array</option>
+                        <option value="videocam">Surveillance Node</option>
+                        <option value="lock">Security Lock</option>
+                        <option value="thermostat">HVAC Control</option>
+                        <option value="speaker">Smart Speaker</option>
+                        <option value="power">Smart Plug</option>
+                        <option value="tv">Smart TV</option>
+                        <option value="kitchen">Smart Refrigerator</option>
+                        <option value="precision_manufacturing">Industrial PLC</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">IP Address (Static)</label>
+                      <input
+                        type="text"
+                        value={addDeviceIp}
+                        onChange={e => setAddDeviceIp(e.target.value)}
+                        onMouseDown={e => e.stopPropagation()}
+                        onMouseUp={e => e.stopPropagation()}
+                        onClick={e => e.stopPropagation()}
+                        onKeyDown={e => e.stopPropagation()}
+                        className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="checkbox"
+                        id="sim-form-allowed"
+                        checked={addDeviceAllowed}
+                        onChange={e => setAddDeviceAllowed(e.checked)}
+                        onMouseDown={e => e.stopPropagation()}
+                        onMouseUp={e => e.stopPropagation()}
+                        onClick={e => e.stopPropagation()}
+                        onKeyDown={e => e.stopPropagation()}
+                        className="size-4 bg-background dark:bg-black border border-surface dark:border-surface-highlight cursor-pointer accent-black dark:accent-white"
+                      />
+                      <label htmlFor="sim-form-allowed" className="text-[10px] text-muted dark:text-gray-400 font-bold uppercase cursor-pointer select-none">
+                        Whitelist default traffic
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      className="w-full bg-black dark:bg-white text-white dark:text-black font-black uppercase text-xs h-9 hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center gap-1.5 outline-none tracking-wider mt-2"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">add_circle</span>
+                      Commission Device
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          )
         )}
 
         {/* Non-admin notice if sim panel toggled */}

@@ -239,6 +239,8 @@ const AppInner: React.FC = () => {
             isAdmin={isAdmin}
             onRemoveDevice={removeDevice}
             onAddDevice={addDevice}
+            mode={mode}
+            onScanMesh={handleScanMesh}
           />
         );
       case 'alerts':
