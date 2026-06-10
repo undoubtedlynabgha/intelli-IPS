@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
+import { spawn, spawnSync, execSync } from 'child_process';
 import fs from 'fs';
 import http from 'http';
 
@@ -71,12 +71,76 @@ function waitForBackend(win, maxWaitMs = 20000, intervalMs = 600) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cleanup helper — kills any orphaned backend instances or port 8000 listeners
+// ─────────────────────────────────────────────────────────────────────────────
+function cleanPriorProcesses() {
+  logToFile('cleanPriorProcesses called');
+  try {
+    if (process.platform === 'win32') {
+      // 1. Kill any running ips_backend.exe instances
+      try {
+        logToFile('Attempting to kill existing ips_backend.exe processes...');
+        execSync('taskkill /F /IM ips_backend.exe', { stdio: 'ignore' });
+        logToFile('Successfully killed prior ips_backend.exe processes.');
+      } catch (e) {
+        // Ignored if no processes are running
+      }
+
+      // 2. Kill whatever is listening on port 8000
+      try {
+        const port = 8000;
+        logToFile(`Checking for processes listening on port ${port}...`);
+        const output = execSync(`netstat -ano | findstr :${port}`, { timeout: 1000 }).toString();
+        const lines = output.split('\n');
+        const pids = new Set();
+        for (const line of lines) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 5) {
+            const localAddress = parts[1];
+            const pid = parts[parts.length - 1];
+            if (localAddress.includes(`:${port}`) && pid && pid !== '0') {
+              pids.add(pid);
+            }
+          }
+        }
+        for (const pid of pids) {
+          logToFile(`Killing process on port ${port} with PID ${pid}...`);
+          execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
+        }
+      } catch (e) {
+        // Ignored if no processes on port 8000
+      }
+    } else {
+      // Unix-based systems fallback
+      try {
+        execSync('killall -9 ips_backend', { stdio: 'ignore' });
+      } catch (e) {}
+      
+      try {
+        const port = 8000;
+        const output = execSync(`lsof -t -i:${port}`, { timeout: 1000 }).toString();
+        const pids = output.trim().split('\n');
+        for (const pid of pids) {
+          if (pid) {
+            logToFile(`Killing process on port ${port} with PID ${pid}...`);
+            execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+          }
+        }
+      } catch (e) {}
+    }
+  } catch (err) {
+    logToFile(`Error in cleanPriorProcesses: ${err.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Start the Python backend executable (packaged mode only)
 // ─────────────────────────────────────────────────────────────────────────────
 function startBackend() {
   logToFile('startBackend called');
 
   if (app.isPackaged) {
+    cleanPriorProcesses();
     const backendPath = path.join(process.resourcesPath, 'backend', 'ips_backend.exe');
     const backendDir = path.dirname(backendPath);
     logToFile(`Backend path: ${backendPath}`);
@@ -123,15 +187,17 @@ function startBackend() {
 
 function killBackend() {
   if (backendProcess) {
-    logToFile('Terminating backend process…');
+    logToFile(`Terminating backend process (PID: ${backendProcess.pid})…`);
     try {
-      // On Windows, spawn a taskkill to ensure all child processes die too
+      // On Windows, use spawnSync to block and ensure taskkill is completed before app exits
       if (process.platform === 'win32' && backendProcess.pid) {
-        spawn('taskkill', ['/pid', String(backendProcess.pid), '/f', '/t'], {
+        const result = spawnSync('taskkill', ['/pid', String(backendProcess.pid), '/f', '/t'], {
           windowsHide: true,
+          timeout: 2000,
         });
+        logToFile(`taskkill completed. Status: ${result.status}`);
       } else {
-        backendProcess.kill();
+        backendProcess.kill('SIGKILL');
       }
       logToFile('Backend terminated.');
     } catch (e) {

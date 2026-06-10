@@ -15,6 +15,8 @@ interface NetworkMapProps {
   // Simulation props
   simulationRunning?: boolean;
   activeAttack?: string | null;
+  activeAttackAttackerId?: string | null;
+  activeAttackTargetId?: string | null;
   mlTrained?: boolean;
   onStartSimulation?: () => Promise<unknown>;
   onStopSimulation?: () => Promise<unknown>;
@@ -42,13 +44,15 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
   backendConnected,
   simulationRunning = false,
   activeAttack = null,
+  activeAttackAttackerId = null,
+  activeAttackTargetId = null,
   mlTrained = false,
   onStartSimulation,
   onStopSimulation,
   onTriggerAttack,
   isAdmin = true,
-  onAddDevice,
   onRemoveDevice,
+  onAddDevice,
 }) => {
   const { theme } = useTheme();
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -66,43 +70,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
   const [addDeviceIp, setAddDeviceIp] = useState(`192.168.1.${Math.floor(Math.random() * 150) + 100}`);
   const [addDeviceAllowed, setAddDeviceAllowed] = useState(true);
 
-  const [selectedScenario, setSelectedScenario] = useState('ddos_gateway');
-  const [runningScenario, setRunningScenario] = useState(false);
 
-  const handleRunScenario = async () => {
-    setRunningScenario(true);
-    onNotify(`Loading scenario: ${selectedScenario}...`, 'info');
-    try {
-      await ipsApi.runScenario(selectedScenario);
-      onNotify(`Scenario '${selectedScenario}' initiated. Training baseline...`, 'success');
-    } catch (e) {
-      onNotify(e instanceof Error ? e.message : 'Failed to launch scenario', 'error');
-    } finally {
-      setRunningScenario(false);
-    }
-  };
-
-  const handleTraceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const json = JSON.parse(event.target?.result as string);
-        if (!Array.isArray(json)) {
-          onNotify('Invalid trace format: must be a JSON array of packets', 'error');
-          return;
-        }
-        onNotify(`Replaying trace: uploading ${json.length} packets...`, 'info');
-        await ipsApi.uploadTrace(json);
-        onNotify(`Trace replay initiated in backend. Check Event Streams!`, 'success');
-      } catch (err) {
-        onNotify('Failed to parse JSON file', 'error');
-      }
-    };
-    reader.readAsText(file);
-  };
 
   // Draggable panel state
   const [panelPos, setPanelPos] = useState({ x: 16, y: 16 });
@@ -334,9 +302,27 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
   const meshLinks = React.useMemo(() => {
     const links: Array<{ id: string; x1: number; y1: number; x2: number; y2: number; status: string; isGateway: boolean }> = [];
     const nonGateway = activeNodes.filter(n => n.type !== 'router');
+    
     nonGateway.forEach(n => {
-      links.push({ id: `gw-${n.id}`, x1: 500, y1: 400, x2: n.x, y2: n.y, status: n.status, isGateway: true });
+      let ls = n.status; // 'online', 'threat', 'blocked'
+      
+      // Override status if there is an active attack
+      if (activeAttack) {
+        const attacker = activeAttackAttackerId;
+        const target = activeAttackTargetId || "GW_01";
+        
+        if (n.status === 'blocked') {
+          ls = 'blocked';
+        } else {
+          // It's in the attack path if it connects the attacker to the gateway, or gateway to target
+          const inPath = (attacker && attacker !== "EXTERNAL" && n.id === attacker) || (target && target !== "GW_01" && n.id === target);
+          ls = inPath ? 'threat' : 'online';
+        }
+      }
+      
+      links.push({ id: `gw-${n.id}`, x1: 500, y1: 400, x2: n.x, y2: n.y, status: ls, isGateway: true });
     });
+    
     nonGateway.forEach(n => {
       const others = nonGateway.filter(o => o.id !== n.id);
       if (others.length === 0) return;
@@ -344,11 +330,19 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
         const dx = o.x - n.x; const dy = o.y - n.y;
         return { node: o, dist: Math.sqrt(dx * dx + dy * dy) };
       }).sort((a, b) => a.dist - b.dist);
+      
       [sortedByDist[0], sortedByDist[1]].filter(Boolean).forEach(item => {
         const near = item.node;
         let ls = 'online';
-        if (n.status === 'blocked' || near.status === 'blocked') ls = 'blocked';
-        else if (n.status === 'threat' || near.status === 'threat') ls = 'threat';
+        if (n.status === 'blocked' || near.status === 'blocked') {
+          ls = 'blocked';
+        } else if (activeAttack) {
+          // Under active attack, inter-device mesh links carry normal traffic unless specified
+          ls = 'online';
+        } else if (n.status === 'threat' || near.status === 'threat') {
+          ls = 'threat';
+        }
+        
         const lid = [n.id, near.id].sort().join('-');
         if (!links.some(l => l.id === lid)) {
           links.push({ id: lid, x1: n.x, y1: n.y, x2: near.x, y2: near.y, status: ls, isGateway: false });
@@ -356,7 +350,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
       });
     });
     return links;
-  }, [activeNodes]);
+  }, [activeNodes, activeAttack, activeAttackAttackerId, activeAttackTargetId]);
 
   const selectedDeviceData = devices.find(d => d.name === selectedNode);
 
@@ -498,19 +492,59 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                     
                     const halfDur = (parseFloat(dur) / 2) + 's';
                     
+                    let fromX = link.x2;
+                    let fromY = link.y2;
+                    let toX = link.x1;
+                    let toY = link.y1;
+
+                    if (activeAttack && link.status === 'threat') {
+                      const attacker = activeAttackAttackerId;
+                      const target = activeAttackTargetId || "GW_01";
+                      
+                      // For target link: flows from Gateway to target
+                      if (target !== "GW_01" && link.id === `gw-${target}`) {
+                        fromX = link.x1; // Gateway
+                        fromY = link.y1;
+                        toX = link.x2;   // Device
+                        toY = link.y2;
+                      }
+                    }
+                    
                     return (
                       <g key={`particles-${link.id}`}>
                         <circle r="3" fill={particleColor} opacity="0.8">
-                          <animate attributeName="cx" from={link.x2} to={link.x1} dur={dur} begin="0s" repeatCount="indefinite" />
-                          <animate attributeName="cy" from={link.y2} to={link.y1} dur={dur} begin="0s" repeatCount="indefinite" />
+                          <animate attributeName="cx" from={fromX} to={toX} dur={dur} begin="0s" repeatCount="indefinite" />
+                          <animate attributeName="cy" from={fromY} to={toY} dur={dur} begin="0s" repeatCount="indefinite" />
                         </circle>
                         <circle r="3" fill={particleColor} opacity="0.8">
-                          <animate attributeName="cx" from={link.x2} to={link.x1} dur={dur} begin={halfDur} repeatCount="indefinite" />
-                          <animate attributeName="cy" from={link.y2} to={link.y1} dur={dur} begin={halfDur} repeatCount="indefinite" />
+                          <animate attributeName="cx" from={fromX} to={toX} dur={dur} begin={halfDur} repeatCount="indefinite" />
+                          <animate attributeName="cy" from={fromY} to={toY} dur={dur} begin={halfDur} repeatCount="indefinite" />
                         </circle>
                       </g>
                     );
                   })}
+
+                  {/* External Attacker WAN Node and Link */}
+                  {simulationRunning && activeAttack && activeAttackAttackerId === "EXTERNAL" && (
+                    <g key="external-attacker-wan">
+                      <line x1={500} y1={120} x2={500} y2={400} stroke="rgba(239,68,68,0.7)" strokeDasharray="4,4" strokeWidth="2.0" />
+                      <circle cx={500} cy={120} r={6} fill="#ef4444" className="animate-ping" />
+                      <circle cx={500} cy={120} r={4} fill="#ef4444" />
+                      <text x={500} y={100} fill="#ef4444" fontSize="9" textAnchor="middle" fontFamily="monospace" fontWeight="bold">
+                        [WAN ATTACKER: {activeAttack.toUpperCase()}]
+                      </text>
+                      
+                      {/* Flow down to Gateway */}
+                      <circle r="4" fill="#ef4444" opacity="0.9">
+                        <animate attributeName="cx" from={500} to={500} dur="0.6s" begin="0s" repeatCount="indefinite" />
+                        <animate attributeName="cy" from={120} to={400} dur="0.6s" begin="0s" repeatCount="indefinite" />
+                      </circle>
+                      <circle r="4" fill="#ef4444" opacity="0.9">
+                        <animate attributeName="cx" from={500} to={500} dur="0.6s" begin="0.3s" repeatCount="indefinite" />
+                        <animate attributeName="cy" from={120} to={400} dur="0.6s" begin="0.3s" repeatCount="indefinite" />
+                      </circle>
+                    </g>
+                  )}
                 </svg>
 
                 <div className="absolute inset-0 w-full h-full pointer-events-none">
@@ -676,6 +710,8 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                 <button
                   key={tab}
                   onClick={() => setSimTab(tab)}
+                  onMouseDown={e => e.stopPropagation()}
+                  onMouseUp={e => e.stopPropagation()}
                   className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors outline-none ${simTab === tab ? 'text-main dark:text-white border-b-2 border-black dark:border-white' : 'text-muted dark:text-gray-500 hover:text-main dark:hover:text-white'}`}
                 >
                   {tab === 'control' ? 'Control' : tab === 'attack' ? 'Attack Inject' : 'Add Node'}
@@ -723,6 +759,8 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                         <button
                           disabled={simulationRunning}
                           onClick={() => handleSimAction(async () => { await onStartSimulation?.(); }, 'IoT simulation started — traffic flowing', 'Failed to start')}
+                          onMouseDown={e => e.stopPropagation()}
+                          onMouseUp={e => e.stopPropagation()}
                           className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase bg-emerald-700/80 hover:bg-emerald-600 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-emerald-600/50 outline-none"
                         >
                           <span className="material-symbols-outlined text-[16px]">play_arrow</span>
@@ -731,6 +769,8 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                         <button
                           disabled={!simulationRunning}
                           onClick={() => handleSimAction(async () => { await onStopSimulation?.(); }, 'Simulation stopped', 'Failed to stop')}
+                          onMouseDown={e => e.stopPropagation()}
+                          onMouseUp={e => e.stopPropagation()}
                           className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold uppercase bg-surface dark:bg-surface-dark hover:bg-red-950/30 text-muted dark:text-gray-400 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed border border-surface dark:border-surface-highlight hover:border-red-500/40 transition-all outline-none"
                         >
                           <span className="material-symbols-outlined text-[16px]">stop</span>
@@ -738,60 +778,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                         </button>
                       </div>
 
-                      {/* Scenario selector */}
-                      <div className="space-y-2 pt-2 border-t border-surface dark:border-surface-highlight">
-                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Preset Security Scenarios</div>
-                        <div className="flex gap-2">
-                          <select
-                            value={selectedScenario}
-                            onChange={e => setSelectedScenario(e.target.value)}
-                            className="flex-1 bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-9 px-2 outline-none font-mono"
-                          >
-                            <option value="ddos_gateway">DDoS Attack on Hub</option>
-                            <option value="hvac_spoofing">HVAC Sensor Spoofing</option>
-                            <option value="brute_force">Gateway Brute Force</option>
-                          </select>
-                          <button
-                            onClick={handleRunScenario}
-                            disabled={runningScenario}
-                            className="px-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs uppercase flex items-center justify-center gap-1 transition-colors outline-none"
-                          >
-                            {runningScenario ? (
-                              <span className="material-symbols-outlined text-sm animate-spin">sync</span>
-                            ) : (
-                              <span className="material-symbols-outlined text-sm">rocket_launch</span>
-                            )}
-                            Run
-                          </button>
-                        </div>
-                        <div className="text-[9px] text-muted dark:text-gray-500 leading-normal">
-                          Runs a pre-scripted multi-step attack simulation with automated baseline.
-                        </div>
-                      </div>
 
-                      {/* Trace Replay */}
-                      <div className="space-y-2 pt-2 border-t border-surface dark:border-surface-highlight">
-                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Network Trace Replay</div>
-                        <div className="flex flex-col gap-1.5">
-                          <input
-                            type="file"
-                            accept=".json"
-                            id="trace-upload-input"
-                            className="hidden"
-                            onChange={handleTraceUpload}
-                          />
-                          <label
-                            htmlFor="trace-upload-input"
-                            className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold uppercase border border-dashed border-surface dark:border-surface-highlight hover:border-blue-500/50 text-muted dark:text-gray-400 hover:text-blue-400 cursor-pointer transition-all"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">upload_file</span>
-                            Upload Packet JSON
-                          </label>
-                        </div>
-                        <div className="text-[9px] text-muted dark:text-gray-500 leading-normal">
-                          Replay recorded packet traces (JSON array) line-by-line through the IPS.
-                        </div>
-                      </div>
 
                       {/* How it works */}
                       <div className="p-3 bg-surface/50 dark:bg-surface-dark/50 border border-surface dark:border-surface-highlight text-[10px] text-muted dark:text-gray-500 leading-relaxed space-y-1">
@@ -826,6 +813,8 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                             key={a.id}
                             disabled={!!activeAttack}
                             onClick={() => setSelectedAttackId(prev => prev === a.id ? null : a.id)}
+                            onMouseDown={e => e.stopPropagation()}
+                            onMouseUp={e => e.stopPropagation()}
                             className={`w-full text-left p-2.5 border transition-colors outline-none ${selectedAttackId === a.id ? 'border-red-500/60 bg-red-950/20' : 'border-surface dark:border-surface-highlight bg-surface/30 dark:bg-surface-dark/30 hover:border-red-500/30'} disabled:opacity-40 disabled:cursor-not-allowed`}
                           >
                             <div className="flex items-center gap-2">
@@ -846,6 +835,10 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                             <select
                               value={attackerId}
                               onChange={e => setAttackerId(e.target.value)}
+                              onMouseDown={e => e.stopPropagation()}
+                              onMouseUp={e => e.stopPropagation()}
+                              onClick={e => e.stopPropagation()}
+                              onKeyDown={e => e.stopPropagation()}
                               className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-7 px-2 outline-none"
                             >
                               <option value="">External Attacker (Internet)</option>
@@ -860,6 +853,10 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                             <select
                               value={targetId}
                               onChange={e => setTargetId(e.target.value)}
+                              onMouseDown={e => e.stopPropagation()}
+                              onMouseUp={e => e.stopPropagation()}
+                              onClick={e => e.stopPropagation()}
+                              onKeyDown={e => e.stopPropagation()}
                               className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight text-main dark:text-white text-xs h-7 px-2 outline-none"
                             >
                               <option value="">Random Active Device</option>
@@ -880,19 +877,27 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                               max={selectedAttackId === 'brute_force' ? 50 : selectedAttackId === 'data_spoofing' ? 20 : 400}
                               value={packetRate}
                               onChange={e => setPacketRate(parseInt(e.target.value))}
+                              onMouseDown={e => e.stopPropagation()}
+                              onMouseUp={e => e.stopPropagation()}
+                              onClick={e => e.stopPropagation()}
+                              onKeyDown={e => e.stopPropagation()}
                               className="w-full cursor-pointer accent-red-500"
                             />
                           </div>
 
                           <div className="flex gap-2 pt-1">
                             <button
-                              onClick={() => setSelectedAttackId(null)}
+                              onMouseDown={e => e.stopPropagation()}
+                              onMouseUp={e => e.stopPropagation()}
+                              onClick={e => { e.stopPropagation(); setSelectedAttackId(null); }}
                               className="flex-1 py-2 text-xs border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white uppercase outline-none transition-colors"
                             >
                               Cancel
                             </button>
                             <button
-                              onClick={handleLaunchAttack}
+                              onMouseDown={e => e.stopPropagation()}
+                              onMouseUp={e => e.stopPropagation()}
+                              onClick={e => { e.stopPropagation(); handleLaunchAttack(); }}
                               className="flex-1 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-bold uppercase outline-none transition-colors flex items-center justify-center gap-1"
                             >
                               <span className="material-symbols-outlined text-[14px]">bolt</span>
@@ -919,8 +924,12 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                       type="text"
                       value={addDeviceName}
                       onChange={e => setAddDeviceName(e.target.value)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
                       placeholder="e.g. SMART_LIGHT_01"
-                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono"
+                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
                     />
                   </div>
 
@@ -929,6 +938,10 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                     <select
                       value={addDeviceType}
                       onChange={e => setAddDeviceType(e.target.value)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
                       className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2 outline-none transition-all"
                     >
                       <option value="sensors">Sensor Array</option>
@@ -949,7 +962,11 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                       type="text"
                       value={addDeviceIp}
                       onChange={e => setAddDeviceIp(e.target.value)}
-                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono"
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
+                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
                     />
                   </div>
 
@@ -959,6 +976,10 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                       id="sim-form-allowed"
                       checked={addDeviceAllowed}
                       onChange={e => setAddDeviceAllowed(e.target.checked)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
                       className="size-4 bg-background dark:bg-black border border-surface dark:border-surface-highlight cursor-pointer accent-black dark:accent-white"
                     />
                     <label htmlFor="sim-form-allowed" className="text-[10px] text-muted dark:text-gray-400 font-bold uppercase cursor-pointer select-none">
@@ -968,6 +989,9 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
 
                   <button
                     type="submit"
+                    onMouseDown={e => e.stopPropagation()}
+                    onMouseUp={e => e.stopPropagation()}
+                    onClick={e => e.stopPropagation()}
                     className="w-full bg-black dark:bg-white text-white dark:text-black font-black uppercase text-xs h-9 hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center gap-1.5 outline-none tracking-wider mt-2"
                   >
                     <span className="material-symbols-outlined text-[15px]">add_circle</span>

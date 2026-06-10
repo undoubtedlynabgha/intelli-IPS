@@ -109,6 +109,8 @@ async def get_metrics():
         false_positive_rate=detector.get_false_positive_rate(),
         devices=network.get_all_devices(),
         active_attack=state["attack_simulator"].active_attack,
+        active_attack_attacker_id=state["attack_simulator"].attacker_device["id"] if state["attack_simulator"].attacker_device else ("EXTERNAL" if state["attack_simulator"].active_attack else None),
+        active_attack_target_id=state["attack_simulator"].target_device["id"] if state["attack_simulator"].target_device else ("GW_01" if state["attack_simulator"].active_attack else None),
         ml_model_trained=detector.ml_detector.is_trained,
         ml_precision=ml_metrics["ml_precision"],
         ml_recall=ml_metrics["ml_recall"],

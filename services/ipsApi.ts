@@ -51,6 +51,8 @@ export interface MetricsResponse {
   false_positive_rate: number;
   devices: Device[];
   active_attack: string | null;
+  active_attack_attacker_id?: string | null;
+  active_attack_target_id?: string | null;
   ml_model_trained: boolean;
   ml_precision: number;
   ml_recall: number;

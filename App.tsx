@@ -190,6 +190,8 @@ const AppInner: React.FC = () => {
             backendConnected={backendConnected}
             simulationRunning={simStatus?.running ?? false}
             activeAttack={simStatus?.active_attack ?? metrics?.active_attack ?? null}
+            activeAttackAttackerId={metrics?.active_attack_attacker_id ?? null}
+            activeAttackTargetId={metrics?.active_attack_target_id ?? null}
             mlTrained={metrics?.ml_model_trained ?? false}
             onStartSimulation={startSimulation}
             onStopSimulation={stopSimulation}

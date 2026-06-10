@@ -142,6 +142,8 @@ class MetricsResponse(BaseModel):
     false_positive_rate: float    # percentage of normal packets flagged
     devices: list[Device]
     active_attack: Optional[str] = None
+    active_attack_attacker_id: Optional[str] = None
+    active_attack_target_id: Optional[str] = None
     ml_model_trained: bool = False
     ml_precision: float = 0.0
     ml_recall: float = 0.0

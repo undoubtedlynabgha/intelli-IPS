@@ -170,6 +170,10 @@ class AnomalyDetector:
         self.training_buffer.append(feat)
         self.samples_since_retrain += 1
 
+        # Keep buffer capped to prevent memory leak
+        if len(self.training_buffer) > 1000:
+            self.training_buffer = self.training_buffer[-1000:]
+
         if self.samples_since_retrain >= ANOMALY_RETRAIN_INTERVAL and len(self.training_buffer) >= self.min_training_samples:
             X = np.array(self.training_buffer[-ANOMALY_RETRAIN_INTERVAL * 2:])
             self.model.fit(X)
