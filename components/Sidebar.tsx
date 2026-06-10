@@ -51,7 +51,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'copilot', label: 'Security Copilot', icon: 'auto_awesome', highlight: 'blue', adminOnly: false },
     { id: 'alerts', label: 'Actions Log', icon: 'notifications', badge: alertsCount, adminOnly: false },
     { id: 'logs', label: 'Event Logs', icon: 'dvr', adminOnly: false },
-    { id: 'ml-eval', label: 'ML Evaluation', icon: 'legend_toggle', adminOnly: false },
     { id: 'reports', label: 'Analytics', icon: 'analytics', adminOnly: false },
   ];
 

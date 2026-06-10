@@ -79,12 +79,55 @@ const Copilot: React.FC<CopilotProps> = ({
         .map(d => `- Node: ${d.name} | ID: ${d.id} | Class: ${d.type} | IP: ${d.ip || 'N/A'} | Status: ${d.status} | Allowed: ${d.allowed}`)
         .join('\n');
 
-      const alertText = alerts.slice(0, 10).length > 0
-        ? alerts.slice(0, 10).map(a => `- [${a.timestamp}] Threat: ${a.threat} | Device: ${a.deviceId} | Risk: ${a.risk} | Action: ${a.actionTaken}`).join('\n')
+      // Sort alerts: Prioritize devices that are blocked/threat in the registry, then by risk severity, then newest first
+      const sortedAlerts = [...alerts].sort((a, b) => {
+        const aDev = devices.find(d => d.id === a.deviceId || d.name === a.device);
+        const bDev = devices.find(d => d.id === b.deviceId || d.name === b.device);
+        const aStatusScore = aDev ? (aDev.status === 'blocked' ? 3 : aDev.status === 'threat' ? 2 : 1) : 1;
+        const bStatusScore = bDev ? (bDev.status === 'blocked' ? 3 : bDev.status === 'threat' ? 2 : 1) : 1;
+        if (aStatusScore !== bStatusScore) {
+          return bStatusScore - aStatusScore;
+        }
+
+        const riskScore: Record<string, number> = {
+          'CRITICAL': 4,
+          'HIGH': 3,
+          'WARNING': 2,
+          'ANOMALY': 1,
+          'INFO': 0
+        };
+        const aRisk = riskScore[a.risk] ?? 0;
+        const bRisk = riskScore[b.risk] ?? 0;
+        if (aRisk !== bRisk) {
+          return bRisk - aRisk;
+        }
+        return 0;
+      });
+
+      const alertText = sortedAlerts.slice(0, 10).length > 0
+        ? sortedAlerts.slice(0, 10).map(a => {
+            const dev = devices.find(d => d.id === a.deviceId || d.name === a.device);
+            const devName = dev ? dev.name : a.device || a.deviceId;
+            const devIp = dev ? dev.ip : a.source_ip || 'N/A';
+            return `- [${a.timestamp}] Threat: ${a.threat} | Device: ${devName} (${devIp}) | Risk: ${a.risk} | Action: ${a.actionTaken}`;
+          }).join('\n')
         : 'No recent threat alerts triggered.';
 
-      const logText = logs.slice(0, 12).length > 0
-        ? logs.slice(0, 12).map(l => `- [${l.timestamp}] ${l.category}: ${l.message} (Status: ${l.status})`).join('\n')
+      // Sort logs: Prioritize MITIGATION logs and logs with BLOCKED/WARNING status
+      const sortedLogs = [...logs].sort((a, b) => {
+        const aMitigation = a.category === 'MITIGATION' || a.status === 'BLOCKED' || a.status === 'WARNING';
+        const bMitigation = b.category === 'MITIGATION' || b.status === 'BLOCKED' || b.status === 'WARNING';
+        if (aMitigation && !bMitigation) return -1;
+        if (!aMitigation && bMitigation) return 1;
+        return 0;
+      });
+
+      const logText = sortedLogs.slice(0, 12).length > 0
+        ? sortedLogs.slice(0, 12).map(l => {
+            const dev = devices.find(d => d.id === l.source || d.name === l.source);
+            const devName = dev ? dev.name : l.source;
+            return `- [${l.timestamp}] ${l.category}: ${l.message} (Source: ${devName}, Status: ${l.status})`;
+          }).join('\n')
         : 'No log entries available.';
       const activeAttackVal = metrics?.active_attack || 'None';
 
@@ -119,7 +162,10 @@ Your response guidelines:
 6. If asked why a node is quarantined or blocked, look for it in the device registry and explain the mitigation triggers.
 7. Format code elements (IPs, MACs, ports, protocols, or actions like BLOCKED) using single backticks (e.g., \`192.168.1.50\`, \`MQTT\`).
 8. Do not include introductory filler or preambles like "Based on the live data provided...". Answer directly as an embedded security system.
-9. Keep responses structured, concise, and highly professional.`;
+9. Keep responses structured, concise, and highly professional.
+10. Do not report a device as quarantined or blocked unless its status in the [DEVICE REGISTRY] is explicitly listed as 'blocked'. If a device is in status 'online' or 'threat', it is not quarantined.
+11. When explaining the latest threat alerts, prioritize critical/high risks and blocked/quarantined devices. If any device has status 'blocked' in the registry, you must explain the alert that triggered that specific quarantine action as your primary focus.
+12. Match details from the [LATEST SYSTEM ALERTS] and [LATEST EVENT LOGS] exactly.`;
 
       const response = await groq.chat.completions.create({
         model: 'llama-3.3-70b-versatile',
@@ -325,8 +371,9 @@ Your response guidelines:
                 key={pIdx}
                 disabled={isLoading}
                 onClick={() => handleSendMessage(prompt.text)}
-                className="text-[10px] font-mono border border-surface dark:border-surface-highlight px-3 py-1.5 bg-background dark:bg-black hover:border-blue-500/50 hover:text-blue-400 transition-all uppercase outline-none disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="text-[10px] font-mono border border-surface dark:border-surface-highlight px-3.5 py-1.5 bg-background dark:bg-black hover:border-blue-500/50 hover:text-blue-400 rounded-full transition-all duration-200 uppercase outline-none disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 hover:bg-blue-500/5 dark:hover:bg-blue-500/5"
               >
+                <span className="material-symbols-outlined text-[13px] text-blue-400 shrink-0">help</span>
                 {prompt.label}
               </button>
             ))}

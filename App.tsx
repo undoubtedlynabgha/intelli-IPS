@@ -10,7 +10,6 @@ import ThreatFeed from './components/ThreatFeed';
 import Logs from './components/Logs';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
-import MLEvalLab from './components/MLEvalLab';
 import Copilot from './components/Copilot';
 import { DEVICES as INITIAL_DEVICES } from './constants';
 import { Device, CopilotMessage } from './types';
@@ -273,8 +272,6 @@ const AppInner: React.FC = () => {
             backendConnected={backendConnected}
           />
         );
-      case 'ml-eval':
-        return <MLEvalLab metrics={metrics} onNotify={addToast} backendConnected={backendConnected} />;
       case 'reports':
         return <Reports onNotify={addToast} metrics={metrics} alerts={backendConnected ? alerts : []} />;
       case 'settings':
@@ -321,7 +318,6 @@ const AppInner: React.FC = () => {
       case 'network': return 'Network Monitor & Simulation';
       case 'alerts': return 'Prevention Action Log';
       case 'logs': return 'Event Streams';
-      case 'ml-eval': return 'Machine Learning Performance Lab';
       case 'reports': return 'Security Analytics';
       case 'settings': return 'System Configuration';
       default: return 'Intelli IPS';

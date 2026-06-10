@@ -37,6 +37,36 @@ const ATTACKS: { id: AttackType; label: string; icon: string; desc: string; colo
   { id: 'heavy_traffic', label: 'Traffic Surge', icon: 'network_check', desc: 'Outbound anomaly profile', color: 'yellow' },
 ];
 
+const SCENARIO_PRESETS = [
+  {
+    id: 'dos_mqtt' as AttackType,
+    label: 'Mirai Botnet DDoS',
+    attacker: 'CAM_04',
+    target: 'GW_01',
+    rate: 250,
+    icon: 'dns',
+    desc: 'Outdoor Camera (CAM_EXT_04) launches MQTT flooding against the central gateway.'
+  },
+  {
+    id: 'brute_force' as AttackType,
+    label: 'Lock Brute Force',
+    attacker: 'EXTERNAL',
+    target: 'DOOR_01',
+    rate: 25,
+    icon: 'lock_open',
+    desc: 'External WAN attacker executes password brute force against the smart door lock.'
+  },
+  {
+    id: 'data_spoofing' as AttackType,
+    label: 'HVAC Sensor Spoofing',
+    attacker: 'SENS_A',
+    target: 'HVAC_01',
+    rate: 12,
+    icon: 'device_thermostat',
+    desc: 'Sensor Cluster A injects falsified data packets into the HVAC controller.'
+  }
+];
+
 const NetworkMap: React.FC<NetworkMapProps> = ({
   isScanning,
   onNotify,
@@ -64,12 +94,37 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
   const [showNodePanel, setShowNodePanel] = useState(true);
   const [selectedNode, setSelectedNode] = useState('CAM_EXT_04');
   const [showSimPanel, setShowSimPanel] = useState(true);
-  const [simTab, setSimTab] = useState<'control' | 'attack' | 'add'>('control');
+  const [simTab, setSimTab] = useState<'control' | 'attack' | 'ml'>('control');
+  const [showAddNodePanel, setShowAddNodePanel] = useState(false);
+  const [addPanelPos, setAddPanelPos] = useState({ x: 16, y: 320 });
+  const isAddDraggingRef = useRef(false);
+  const addDragOffsetRef = useRef({ x: 0, y: 0 });
   const [realTab, setRealTab] = useState<'status' | 'defense'>('status');
   const [selectedAttackId, setSelectedAttackId] = useState<AttackType | null>(null);
   const [targetId, setTargetId] = useState<string>('');
   const [attackerId, setAttackerId] = useState<string>('');
   const [packetRate, setPacketRate] = useState<number>(50);
+
+  const [contamination, setContamination] = useState(0.05);
+  const [estimators, setEstimators] = useState(100);
+  const [isRetraining, setIsRetraining] = useState(false);
+
+  const handleRetrain = async () => {
+    if (!backendConnected || !ipsApi) {
+      onNotify('Backend offline. Retraining disabled in demo mode.', 'warning');
+      return;
+    }
+    setIsRetraining(true);
+    onNotify('Initiating Isolation Forest retraining sequence...', 'info');
+    try {
+      const res = await ipsApi.retrainMlModel(contamination, estimators);
+      onNotify(res.message || 'Model retrained successfully!', 'success');
+    } catch (e) {
+      onNotify(e instanceof Error ? e.message : 'Retraining failed', 'error');
+    } finally {
+      setIsRetraining(false);
+    }
+  };
 
   const [addDeviceName, setAddDeviceName] = useState('');
   const [addDeviceType, setAddDeviceType] = useState('sensors');
@@ -190,6 +245,29 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
     window.addEventListener('mouseup', onMouseUp);
   }, [panelPos]);
 
+  const handleAddPanelMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isAddDraggingRef.current = true;
+    addDragOffsetRef.current = { x: e.clientX - addPanelPos.x, y: e.clientY - addPanelPos.y };
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isAddDraggingRef.current) return;
+      const container = canvasRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const newX = Math.max(0, Math.min(ev.clientX - addDragOffsetRef.current.x, rect.width - 290));
+      const newY = Math.max(0, Math.min(ev.clientY - addDragOffsetRef.current.y, rect.height - 100));
+      setAddPanelPos({ x: newX, y: newY });
+    };
+    const onMouseUp = () => {
+      isAddDraggingRef.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [addPanelPos]);
+
   const handleZoom = (delta: number) => {
     setZoomLevel(prev => Math.min(Math.max(prev + delta, 40), 400));
   };
@@ -230,6 +308,21 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
       onNotify(ok, 'success');
     } catch (e) {
       onNotify(e instanceof Error ? e.message : err, 'error');
+    }
+  };
+
+  const handleApplyPreset = async (preset: typeof SCENARIO_PRESETS[number]) => {
+    try {
+      const targetDev = devices.find(d => d.id === preset.target || d.name === preset.target);
+      const attackerDev = devices.find(d => d.id === preset.attacker || d.name === preset.attacker);
+
+      const targetIdVal = targetDev && targetDev.id !== 'GW_01' ? targetDev.id : undefined;
+      const attackerIdVal = attackerDev && attackerDev.id !== 'EXTERNAL' ? attackerDev.id : undefined;
+
+      await onTriggerAttack?.(preset.id, targetIdVal, attackerIdVal, preset.rate);
+      onNotify(`Scenario [${preset.label}] successfully injected — IPS responding`, 'warning');
+    } catch (e) {
+      onNotify(e instanceof Error ? e.message : 'Preset injection failed', 'error');
     }
   };
 
@@ -473,13 +566,23 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
           </button>
           <div className="h-4 w-px bg-surface dark:bg-surface-highlight mx-2"></div>
           {isAdmin && (
-            <button
-              onClick={() => setShowSimPanel(v => !v)}
-              className={`flex items-center gap-1.5 text-[11px] font-bold px-3 h-7 transition-all border outline-none ${showSimPanel ? 'bg-blue-600 border-blue-500 text-white' : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white'}`}
-            >
-              <span className="material-symbols-outlined text-[14px]">science</span>
-              Simulation
-            </button>
+            <>
+              <button
+                onClick={() => setShowAddNodePanel(v => !v)}
+                className={`flex items-center gap-1.5 text-[11px] font-bold px-3 h-7 transition-all border outline-none ${showAddNodePanel ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white'}`}
+              >
+                <span className="material-symbols-outlined text-[14px]">add_circle</span>
+                Commission Node
+              </button>
+              <div className="h-4 w-px bg-surface dark:bg-surface-highlight mx-2"></div>
+              <button
+                onClick={() => setShowSimPanel(v => !v)}
+                className={`flex items-center gap-1.5 text-[11px] font-bold px-3 h-7 transition-all border outline-none ${showSimPanel ? 'bg-blue-600 border-blue-500 text-white' : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white'}`}
+              >
+                <span className="material-symbols-outlined text-[14px]">science</span>
+                Simulation
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -770,6 +873,129 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
               </div>
             </div>
           )}
+
+          {/* Draggable Add Node panel */}
+          {showAddNodePanel && isAdmin && (
+            <div
+              className="absolute w-72 bg-background/97 dark:bg-black/97 backdrop-blur-md border border-surface dark:border-surface-highlight shadow-2xl flex flex-col z-30 animate-in fade-in slide-in-from-left-4 duration-300 pointer-events-auto"
+              style={{ top: `${addPanelPos.y}px`, left: `${addPanelPos.x}px`, userSelect: 'none' }}
+            >
+              {/* Drag handle header */}
+              <div
+                className="p-3 border-b bg-surface/30 dark:bg-surface-dark/30 border-surface dark:border-surface-highlight flex justify-between items-center cursor-grab active:cursor-grabbing"
+                onMouseDown={handleAddPanelMouseDown}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px] text-gray-500 mr-0.5">drag_indicator</span>
+                  <span className="material-symbols-outlined text-sm text-emerald-500 pixel-icon">add_circle</span>
+                  <span className="text-xs font-bold uppercase tracking-wider font-mono text-main dark:text-white">
+                    Commission Node
+                  </span>
+                </div>
+                <button 
+                  onClick={() => setShowAddNodePanel(false)} 
+                  className="text-muted dark:text-gray-500 hover:text-main dark:hover:text-white p-1 outline-none cursor-pointer"
+                  onMouseDown={e => e.stopPropagation()}
+                  onMouseUp={e => e.stopPropagation()}
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              </div>
+              <div className="p-4">
+                <form 
+                  onSubmit={(e) => {
+                    handleAddSubmit(e);
+                    setShowAddNodePanel(false);
+                  }} 
+                  className="space-y-4 font-mono"
+                >
+                  <p className="text-muted dark:text-gray-500 text-[10px] uppercase tracking-wide leading-relaxed">
+                    Deploy a new simulated IoT node into the active mesh topology.
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Label</label>
+                    <input
+                      type="text"
+                      value={addDeviceName}
+                      onChange={e => setAddDeviceName(e.target.value)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
+                      placeholder="e.g. SMART_LIGHT_01"
+                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Class</label>
+                    <select
+                      value={addDeviceType}
+                      onChange={e => setAddDeviceType(e.target.value)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
+                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2 outline-none transition-all"
+                    >
+                      <option value="sensors">Sensor Array</option>
+                      <option value="videocam">Surveillance Node</option>
+                      <option value="lock">Security Lock</option>
+                      <option value="thermostat">HVAC Control</option>
+                      <option value="speaker">Smart Speaker</option>
+                      <option value="power">Smart Plug</option>
+                      <option value="tv">Smart TV</option>
+                      <option value="kitchen">Smart Refrigerator</option>
+                      <option value="precision_manufacturing">Industrial PLC</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">IP Address (Static)</label>
+                    <input
+                      type="text"
+                      value={addDeviceIp}
+                      onChange={e => setAddDeviceIp(e.target.value)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
+                      className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="sim-form-allowed"
+                      checked={addDeviceAllowed}
+                      onChange={e => setAddDeviceAllowed(e.target.checked)}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
+                      className="size-4 bg-background dark:bg-black border border-surface dark:border-surface-highlight cursor-pointer accent-black dark:accent-white"
+                    />
+                    <label htmlFor="sim-form-allowed" className="text-[10px] text-muted dark:text-gray-400 font-bold uppercase cursor-pointer select-none">
+                      Whitelist default traffic
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    onMouseDown={e => e.stopPropagation()}
+                    onMouseUp={e => e.stopPropagation()}
+                    onClick={e => e.stopPropagation()}
+                    className="w-full bg-black dark:bg-white text-white dark:text-black font-black uppercase text-xs h-9 hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center gap-1.5 outline-none tracking-wider mt-2"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">add_circle</span>
+                    Commission Device
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
         {/* Simulation Side Panel or IPS Real Console */}
         {showSimPanel && isAdmin && (
@@ -956,7 +1182,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
 
               {/* Sub-tabs */}
               <div className="flex border-b border-surface dark:border-surface-highlight shrink-0">
-                {(['control', 'attack', 'add'] as const).map(tab => (
+                {(['control', 'attack', 'ml'] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setSimTab(tab)}
@@ -964,7 +1190,7 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                     onMouseUp={e => e.stopPropagation()}
                     className={`flex-1 py-2 text-xs font-bold uppercase tracking-wide transition-colors outline-none ${simTab === tab ? 'text-main dark:text-white border-b-2 border-black dark:border-white' : 'text-muted dark:text-gray-500 hover:text-main dark:hover:text-white'}`}
                   >
-                    {tab === 'control' ? 'Control' : tab === 'attack' ? 'Attack Inject' : 'Add Node'}
+                    {tab === 'control' ? 'Control' : tab === 'attack' ? 'Attack Inject' : 'ML Config'}
                   </button>
                 ))}
               </div>
@@ -1056,7 +1282,32 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                       </div>
                     ) : (
                       <>
-                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Select Attack Vector</div>
+                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold mb-2">Tactical Attack Presets</div>
+                        <div className="space-y-2 mb-4">
+                          {SCENARIO_PRESETS.map(preset => (
+                            <button
+                              key={preset.label}
+                              disabled={!!activeAttack}
+                              onClick={() => handleApplyPreset(preset)}
+                              onMouseDown={e => e.stopPropagation()}
+                              onMouseUp={e => e.stopPropagation()}
+                              className="w-full text-left p-2 border border-blue-500/20 bg-blue-950/10 hover:border-blue-500/50 hover:bg-blue-950/20 transition-all outline-none disabled:opacity-40 disabled:cursor-not-allowed group cursor-pointer"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-[15px] text-blue-400 group-hover:animate-pulse">{preset.icon}</span>
+                                  <span className="text-xs font-bold text-main dark:text-white uppercase">{preset.label}</span>
+                                </div>
+                                <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 font-bold border border-blue-500/30 uppercase rounded-sm">Scenario</span>
+                              </div>
+                              <span className="block text-[9px] text-muted dark:text-gray-400 mt-1 select-none font-mono leading-relaxed">{preset.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="h-px bg-surface dark:bg-surface-highlight my-3"></div>
+
+                        <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Select Individual Vector</div>
                         <div className="space-y-1.5">
                           {ATTACKS.map(a => (
                             <button
@@ -1161,94 +1412,76 @@ const NetworkMap: React.FC<NetworkMapProps> = ({
                   </>
                 )}
 
-                {simTab === 'add' && (
-                  <form onSubmit={handleAddSubmit} className="space-y-4 animate-in fade-in duration-200">
-                    <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">Commission Node</div>
+                {simTab === 'ml' && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="text-[10px] text-muted dark:text-gray-500 uppercase tracking-widest font-bold">ML Hyperparameter Config</div>
                     <p className="text-muted dark:text-gray-500 text-[10px] uppercase tracking-wide leading-relaxed">
-                      Deploy a new simulated IoT node into the active mesh topology.
+                      Fine-tune the Isolation Forest model parameters and retrain the anomaly detection engine.
                     </p>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Label</label>
-                      <input
-                        type="text"
-                        value={addDeviceName}
-                        onChange={e => setAddDeviceName(e.target.value)}
-                        onMouseDown={e => e.stopPropagation()}
-                        onMouseUp={e => e.stopPropagation()}
-                        onClick={e => e.stopPropagation()}
-                        onKeyDown={e => e.stopPropagation()}
-                        placeholder="e.g. SMART_LIGHT_01"
-                        className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
-                      />
-                    </div>
+                    {!backendConnected ? (
+                      <div className="p-3 bg-orange-950/20 border border-orange-500/30 text-orange-400 text-xs font-mono">
+                        <span className="font-bold block mb-1">Backend Required</span>
+                        <code className="text-muted dark:text-gray-400">cd backend && python main.py</code>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 font-mono">
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted dark:text-gray-400">Contamination:</span>
+                            <span className="text-blue-400 font-bold">{(contamination * 100).toFixed(0)}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.01"
+                            max="0.20"
+                            step="0.01"
+                            value={contamination}
+                            onChange={(e) => setContamination(parseFloat(e.target.value))}
+                            onMouseDown={e => e.stopPropagation()}
+                            onMouseUp={e => e.stopPropagation()}
+                            onClick={e => e.stopPropagation()}
+                            onKeyDown={e => e.stopPropagation()}
+                            className="w-full cursor-pointer accent-blue-500 bg-background border border-surface dark:border-surface-highlight"
+                          />
+                        </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">Device Class</label>
-                      <select
-                        value={addDeviceType}
-                        onChange={e => setAddDeviceType(e.target.value)}
-                        onMouseDown={e => e.stopPropagation()}
-                        onMouseUp={e => e.stopPropagation()}
-                        onClick={e => e.stopPropagation()}
-                        onKeyDown={e => e.stopPropagation()}
-                        className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2 outline-none transition-all"
-                      >
-                        <option value="sensors">Sensor Array</option>
-                        <option value="videocam">Surveillance Node</option>
-                        <option value="lock">Security Lock</option>
-                        <option value="thermostat">HVAC Control</option>
-                        <option value="speaker">Smart Speaker</option>
-                        <option value="power">Smart Plug</option>
-                        <option value="tv">Smart TV</option>
-                        <option value="kitchen">Smart Refrigerator</option>
-                        <option value="precision_manufacturing">Industrial PLC</option>
-                      </select>
-                    </div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted dark:text-gray-400">Estimators:</span>
+                            <span className="text-blue-400 font-bold">{estimators} trees</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="10"
+                            max="200"
+                            step="10"
+                            value={estimators}
+                            onChange={(e) => setEstimators(parseInt(e.target.value))}
+                            onMouseDown={e => e.stopPropagation()}
+                            onMouseUp={e => e.stopPropagation()}
+                            onClick={e => e.stopPropagation()}
+                            onKeyDown={e => e.stopPropagation()}
+                            className="w-full cursor-pointer accent-blue-500 bg-background border border-surface dark:border-surface-highlight"
+                          />
+                        </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-muted dark:text-gray-400 uppercase tracking-wider">IP Address (Static)</label>
-                      <input
-                        type="text"
-                        value={addDeviceIp}
-                        onChange={e => setAddDeviceIp(e.target.value)}
-                        onMouseDown={e => e.stopPropagation()}
-                        onMouseUp={e => e.stopPropagation()}
-                        onClick={e => e.stopPropagation()}
-                        onKeyDown={e => e.stopPropagation()}
-                        className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-xs h-8 px-2.5 outline-none transition-all font-mono relative z-50 pointer-events-auto"
-                      />
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-1">
-                      <input
-                        type="checkbox"
-                        id="sim-form-allowed"
-                        checked={addDeviceAllowed}
-                        onChange={e => setAddDeviceAllowed(e.checked)}
-                        onMouseDown={e => e.stopPropagation()}
-                        onMouseUp={e => e.stopPropagation()}
-                        onClick={e => e.stopPropagation()}
-                        onKeyDown={e => e.stopPropagation()}
-                        className="size-4 bg-background dark:bg-black border border-surface dark:border-surface-highlight cursor-pointer accent-black dark:accent-white"
-                      />
-                      <label htmlFor="sim-form-allowed" className="text-[10px] text-muted dark:text-gray-400 font-bold uppercase cursor-pointer select-none">
-                        Whitelist default traffic
-                      </label>
-                    </div>
-
-                    <button
-                      type="submit"
-                      onMouseDown={e => e.stopPropagation()}
-                      onMouseUp={e => e.stopPropagation()}
-                      onClick={e => e.stopPropagation()}
-                      className="w-full bg-black dark:bg-white text-white dark:text-black font-black uppercase text-xs h-9 hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center gap-1.5 outline-none tracking-wider mt-2"
-                    >
-                      <span className="material-symbols-outlined text-[15px]">add_circle</span>
-                      Commission Device
-                    </button>
-                  </form>
+                        <button
+                          onClick={handleRetrain}
+                          disabled={isRetraining || !backendConnected}
+                          onMouseDown={e => e.stopPropagation()}
+                          onMouseUp={e => e.stopPropagation()}
+                          className="mt-2 w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-blue-500 outline-none animate-in fade-in"
+                        >
+                          <span className={`material-symbols-outlined text-[16px] ${isRetraining ? 'animate-spin' : ''}`}>sync</span>
+                          {isRetraining ? 'Retraining...' : 'Retrain ML Engine'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
+
+                {/* Add Node form removed from sidebar tab */}
               </div>
             </div>
           )

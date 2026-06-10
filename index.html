@@ -106,12 +106,17 @@
 
         /* Print / PDF Export Styling */
         @media print {
-            body {
-                background-color: #000 !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
+            html, body, #root, .flex.h-screen, main, #report-container {
+                height: auto !important;
+                overflow: visible !important;
+                position: static !important;
+                background: #000000 !important;
+                color: #ffffff !important;
             }
-            aside, header, .no-print, button {
+            .flex.h-screen {
+                display: block !important;
+            }
+            aside, header, .no-print, button, a {
                 display: none !important;
             }
             main {
@@ -119,26 +124,38 @@
                 padding: 0 !important;
                 margin: 0 !important;
                 width: 100% !important;
-                height: auto !important;
-                overflow: visible !important;
-            }
-            .flex-1 {
-                overflow: visible !important;
-            }
-            /* Ensure the report content fills the page */
-            #report-container {
-                padding: 2cm !important;
-            }
-            .grid {
                 display: block !important;
             }
-            .grid > * {
-                margin-bottom: 2rem !important;
-                page-break-inside: avoid !important;
+            #report-container {
+                padding: 1.5cm !important;
+                display: block !important;
+                width: 100% !important;
             }
-            .bg-surface-dark {
-                background-color: #111 !important;
-                border: 1px solid #333 !important;
+            .print-grid-2 {
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 1.5rem !important;
+            }
+            .print-grid-6 {
+                display: grid !important;
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 1rem !important;
+            }
+            .grid > *, .bg-surface, table, tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .chart-print-container {
+                height: 300px !important;
+                width: 100% !important;
+            }
+            .chart-print-container-pie {
+                height: 220px !important;
+                width: 100% !important;
+            }
+            .chart-print-container-roc {
+                height: 220px !important;
+                width: 100% !important;
             }
             .text-white { color: white !important; }
             .text-gray-500 { color: #888 !important; }
