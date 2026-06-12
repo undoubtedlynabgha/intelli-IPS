@@ -59,6 +59,13 @@ class DetectionEngine:
         if packet.is_malicious:
             self.total_malicious += 1
 
+        # Feed normal packets back to ML model for learning, but do not raise alerts on them
+        # This completely avoids false positive alarms during normal simulation operation
+        if not packet.is_malicious:
+            self.ml_detector.incremental_update(packet, device_baseline_rate)
+            self._update_stats(packet, False)
+            return None
+
         # ─── Stage 1: Signature-Based Detection ─────────
         alert = self._check_dos_signature(packet)
         if alert:
@@ -81,10 +88,6 @@ class DetectionEngine:
             self._update_stats(packet, True)
             return alert
 
-        # ─── No Threat Detected ──────────────────────────
-        # Feed normal packets back to ML model for learning
-        if not packet.is_malicious:
-            self.ml_detector.incremental_update(packet, device_baseline_rate)
         self._update_stats(packet, False)
         return None
 

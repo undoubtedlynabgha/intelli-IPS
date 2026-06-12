@@ -27,14 +27,16 @@
             theme: {
                 extend: {
                     colors: {
-                        "primary": "#333333",
-                        "primary-dark": "#000000",
-                        "background-light": "#f0f0f0",
+                        "primary": "#4A6FD4",
+                        "primary-dark": "#3a5eca",
+                        "logo-accent": "#4A6FD4",
+                        "logo-dark": "#3a5eca",
+                        "background-light": "#eef0f3",
                         "background-dark": "#000000",
-                        "surface-dark": "#111111",
-                        "surface-highlight": "#333333",
-                        "text-main": "#ffffff",
-                        "text-muted": "#9ca3af",
+                        "surface-dark": "#0a0a0a",
+                        "surface-highlight": "#171717",
+                        "text-main": "var(--text-main)",
+                        "text-muted": "var(--text-muted)",
                     },
                     backgroundColor: {
                         "background": "var(--bg-background)",
@@ -54,9 +56,14 @@
                         "pixel": ["'VT323'", "monospace"],
                     },
                     borderRadius: {
-                        "DEFAULT": "0",
-                        "lg": "0",
-                        "xl": "0",
+                        "none": "0px",
+                        "sm": "0.125rem",
+                        "DEFAULT": "0.375rem",
+                        "md": "0.5rem",
+                        "lg": "0.75rem",
+                        "xl": "1rem",
+                        "2xl": "1.5rem",
+                        "3xl": "2rem",
                         "full": "9999px"
                     },
                 },
@@ -66,19 +73,19 @@
     <style>
         :root {
             --bg-background: #000000;
-            --bg-surface: #111111;
-            --bg-surface-highlight: #333333;
-            --text-main: #ffffff;
-            --text-muted: #9ca3af;
-            --border-surface: #333333;
+            --bg-surface: #0a0a0a;
+            --bg-surface-highlight: #171717;
+            --text-main: #f5f5f5;
+            --text-muted: #737373;
+            --border-surface: #262626;
         }
         :root:not(.dark) {
-            --bg-background: #f0f0f0;
+            --bg-background: #eef0f3;
             --bg-surface: #ffffff;
-            --bg-surface-highlight: #e5e5e5;
-            --text-main: #000000;
-            --text-muted: #6b7280;
-            --border-surface: #d1d5db;
+            --bg-surface-highlight: #e2e8f0;
+            --text-main: #0f172a;
+            --text-muted: #737373;
+            --border-surface: #e5e5e5;
         }
         ::-webkit-scrollbar {
             width: 8px;

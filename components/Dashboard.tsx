@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer
 } from 'recharts';
 import { TRAFFIC_DATA, ALERTS } from '../constants';
 import { Alert, ChartDataPoint, RiskLevel } from '../types';
@@ -17,26 +17,45 @@ interface DashboardProps {
   backendConnected?: boolean;
 }
 
-const KpiCard = ({ title, value, sub, icon, accent, onClick, navLabel }: {
+const KpiCard = ({ title, value, sub, icon, accent, onClick, navLabel, isHighlighted, badge }: {
   title: string; value: string | number; sub: React.ReactNode;
   icon: string; accent: string; onClick?: () => void; navLabel?: string;
+  isHighlighted?: boolean; badge?: React.ReactNode;
 }) => (
   <button
     onClick={onClick}
-    className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 flex flex-col justify-between h-28 relative overflow-hidden group hover:border-opacity-80 transition-all text-left outline-none"
-    style={{ '--accent': accent } as any}
+    className={`border rounded-2xl p-5 flex flex-col justify-between h-28 relative overflow-hidden group transition-all text-left outline-none shadow-sm ${
+      isHighlighted
+        ? 'bg-gradient-to-br from-[#FF8A00] to-[#FF5500] text-white border-none'
+        : 'bg-surface dark:bg-surface-dark border-surface dark:border-surface-highlight text-main dark:text-white hover:border-[#4A6FD4]/50 dark:hover:border-[#4A6FD4]/50'
+    }`}
   >
-    <div className="absolute right-3 top-3 opacity-8 group-hover:opacity-15 transition-opacity">
-      <span className="material-symbols-outlined text-5xl pixel-icon" style={{ color: accent }}>{icon}</span>
+    {/* Circular Arrow on Top-Right */}
+    <div className={`absolute right-3 top-3 w-7 h-7 rounded-full border flex items-center justify-center transition-all ${
+      isHighlighted
+        ? 'border-white/20 text-white group-hover:bg-white/10'
+        : 'border-surface dark:border-surface-highlight text-muted dark:text-gray-400 group-hover:text-primary dark:group-hover:text-blue-300'
+    }`}>
+      <span className="material-symbols-outlined text-[14px]">arrow_outward</span>
     </div>
+
     <div>
-      <p className="text-muted dark:text-gray-500 text-[11px] font-bold uppercase tracking-widest">{title}</p>
-      <p className="text-2xl font-black mt-1 tracking-tight font-mono" style={{ color: accent }}>{value}</p>
+      <div className="flex items-center gap-1.5">
+        <span className={`material-symbols-outlined text-[15px] pixel-icon ${isHighlighted ? 'text-white' : ''}`} style={!isHighlighted ? { color: accent } : {}}>{icon}</span>
+        <p className={`text-[10px] font-bold uppercase tracking-widest ${isHighlighted ? 'text-white/70' : 'text-muted dark:text-gray-500'}`}>{title}</p>
+      </div>
+      <div className="flex items-baseline gap-2 mt-0.5">
+        <p className="text-3xl sm:text-4xl font-black tracking-tight font-mono">{value}</p>
+        {badge}
+      </div>
     </div>
+    
     <div className="flex items-end justify-between w-full">
-      <div className="text-[11px] font-mono text-muted dark:text-gray-500">{sub}</div>
+      <div className={`text-[10px] font-mono leading-tight ${isHighlighted ? 'text-white/70' : 'text-muted dark:text-gray-500'}`}>{sub}</div>
       {navLabel && (
-        <span className="text-[9px] font-mono text-gray-600 dark:text-gray-700 group-hover:text-gray-400 dark:group-hover:text-gray-400 transition-colors flex items-center gap-0.5 shrink-0 ml-2">
+        <span className={`text-[9px] font-mono transition-colors flex items-center gap-0.5 shrink-0 ml-2 ${
+          isHighlighted ? 'text-white/70 group-hover:text-white' : 'text-gray-500 dark:text-gray-600 group-hover:text-primary'
+        }`}>
           <span className="material-symbols-outlined text-[10px]">arrow_forward</span>{navLabel}
         </span>
       )}
@@ -68,13 +87,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const blockedCount = metrics?.devices.filter(d => d.status === 'blocked').length ?? 1;
   const threatCount = metrics?.devices.filter(d => d.status === 'threat').length ?? 0;
 
-  // Traffic breakdown pie chart data
-  const trafficBreakdown = [
-    { name: 'Allowed', value: onlineCount, color: '#10b981' },
-    { name: 'Prevented', value: blockedCount, color: '#ef4444' },
-    { name: 'Flagged', value: threatCount, color: '#f97316' },
-  ].filter(d => d.value > 0);
-
   // Traffic trend: augment with allowed vs prevented
   const enhancedChartData = chartData.map((d, i) => ({
     time: d.time,
@@ -105,10 +117,10 @@ const Dashboard: React.FC<DashboardProps> = ({
             <button
               key={t}
               onClick={() => setActiveTimeRange(t)}
-              className={`px-3 py-1 text-xs font-mono border transition-all outline-none ${
+              className={`px-3 py-1 text-xs font-mono border transition-all rounded-lg outline-none ${
                 activeTimeRange === t
                   ? 'bg-black dark:bg-white text-white dark:text-black font-bold border-black dark:border-white'
-                  : 'bg-surface dark:bg-surface-dark text-muted dark:text-gray-400 border-surface dark:border-surface-highlight hover:border-black dark:hover:border-white'
+                  : 'bg-surface dark:bg-surface-dark text-muted dark:text-gray-400 border-surface dark:border-surface-highlight hover:border-[#4A6FD4]'
               }`}
             >
               {t}
@@ -126,7 +138,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           accent="#10b981"
           onClick={() => onNavigate('network')}
           navLabel="Network"
-          sub={<span className="text-emerald-500">Nodes passing IPS checks</span>}
+          isHighlighted={false}
+          sub={<span className="text-emerald-500 font-mono">Nodes passing checks</span>}
         />
         <KpiCard
           title="Traffic Prevented"
@@ -144,6 +157,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           accent="#f97316"
           onClick={() => onNavigate('alerts')}
           navLabel="Actions Log"
+          badge={<span className="bg-[#4A6FD4]/15 text-[#4A6FD4] dark:text-blue-300 text-[9px] font-mono px-1.5 py-0.5 rounded-full font-bold ml-1">+{pps} pps</span>}
           sub={<span className="text-orange-400">PPS: {pps} &bull; Under analysis</span>}
         />
         <KpiCard
@@ -160,38 +174,60 @@ const Dashboard: React.FC<DashboardProps> = ({
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* Allowed vs Prevented Traffic Chart */}
+        {/* Statistics Bar Chart */}
         <div
           onClick={() => onNavigate('reports')}
-          className="lg:col-span-2 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 flex flex-col group cursor-pointer hover:border-black/20 dark:hover:border-white/20 transition-all"
+          className="lg:col-span-2 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl p-6 flex flex-col group cursor-pointer hover:border-[#4A6FD4]/45 dark:hover:border-[#4A6FD4]/45 transition-all shadow-sm"
         >
-          <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-start mb-6">
             <div>
-              <h3 className="text-main dark:text-white font-bold text-sm uppercase tracking-wide group-hover:text-emerald-400 transition-colors">
-                Allowed vs Prevented Traffic
-              </h3>
-              <p className="text-muted dark:text-gray-500 text-xs font-mono mt-0.5">Real-time IPS traffic classification</p>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg text-main">bar_chart</span>
+                <h3 className="text-main dark:text-white font-bold text-sm uppercase tracking-wide group-hover:text-[#4A6FD4] transition-colors">
+                  Statistics
+                </h3>
+              </div>
+              <p className="text-muted dark:text-gray-500 text-xs font-mono mt-0.5">Vulnerability vs baseline traffic analysis</p>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-mono">
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span>Allowed</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-red-500 rounded-full"></span>Prevented</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-[#FF8A00] rounded-full"></span>Allowed</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-[#4A6FD4] rounded-full"></span>Prevented</span>
             </div>
           </div>
-          <div className="flex-1 w-full min-h-[200px]">
+
+          {/* Two metrics side by side like the reference Statistics header */}
+          <div className="grid grid-cols-2 gap-4 mb-6 border-b border-surface dark:border-surface-highlight pb-4">
+            <div>
+              <span className="text-[10px] text-muted uppercase tracking-widest block font-mono">Allowed Traffic</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-black text-main font-mono">{onlineCount * 123}</span>
+                <span className="text-[10px] text-emerald-500 font-bold font-mono">↗ 4.1% baseline</span>
+              </div>
+            </div>
+            <div className="border-l border-surface dark:border-surface-highlight pl-4">
+              <span className="text-[10px] text-muted uppercase tracking-widest block font-mono">Prevented Threats</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-black text-main font-mono">{totalPrevented * 8}</span>
+                <span className="text-[10px] text-emerald-500 font-bold font-mono">↗ 2% coverage</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 w-full min-h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={enhancedChartData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+              <AreaChart data={enhancedChartData.slice(-10)} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
                 <defs>
-                  <linearGradient id="gradAllowed" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  <linearGradient id="colorAllowed" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#FF8A00" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#FF8A00" stopOpacity={0.0}/>
                   </linearGradient>
-                  <linearGradient id="gradPrevented" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                  <linearGradient id="colorPrevented" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4A6FD4" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#4A6FD4" stopOpacity={0.0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-surface)" vertical={false} />
-                <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={10} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-surface)" vertical={false} opacity={0.3} />
+                <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={10} tickLine={false} />
                 <YAxis hide />
                 <Tooltip
                   contentStyle={{
@@ -199,64 +235,113 @@ const Dashboard: React.FC<DashboardProps> = ({
                     border: '1px solid var(--border-surface)',
                     color: 'var(--text-main)',
                     fontSize: '11px',
-                    fontFamily: 'monospace'
+                    fontFamily: 'monospace',
+                    borderRadius: '8px'
                   }}
+                  cursor={{ stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 }}
                 />
-                <Area type="monotone" dataKey="allowed" stroke="#10b981" strokeWidth={2} fill="url(#gradAllowed)" name="Allowed" />
-                <Area type="monotone" dataKey="prevented" stroke="#ef4444" strokeWidth={2} fill="url(#gradPrevented)" name="Prevented" />
+                <Area type="monotone" dataKey="allowed" stroke="#FF8A00" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAllowed)" name="Allowed" />
+                <Area type="monotone" dataKey="prevented" stroke="#4A6FD4" strokeWidth={2.5} fillOpacity={1} fill="url(#colorPrevented)" name="Prevented" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Traffic Breakdown Pie */}
+        {/* Traffic Profile & Health (Overlapping Circles + Progress Bars) */}
         <div
           onClick={() => onNavigate('network')}
-          className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 flex flex-col cursor-pointer hover:border-black/20 dark:hover:border-white/20 transition-all group"
+          className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl p-6 flex flex-col cursor-pointer hover:border-[#4A6FD4]/45 dark:hover:border-[#4A6FD4]/45 transition-all group shadow-sm"
         >
-          <h3 className="text-main dark:text-white font-bold text-sm uppercase tracking-wide mb-1 group-hover:text-blue-400 transition-colors">
-            Node Status Split
-          </h3>
-          <p className="text-muted dark:text-gray-500 text-xs font-mono mb-4">IPS classification by node</p>
-          <div className="flex-1 min-h-[160px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={trafficBreakdown}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={75}
-                  paddingAngle={3}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {trafficBreakdown.map((entry, idx) => (
-                    <Cell key={idx} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--bg-surface)',
-                    border: '1px solid var(--border-surface)',
-                    color: 'var(--text-main)',
-                    fontSize: '11px',
-                    fontFamily: 'monospace'
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-lg text-main">groups</span>
+              <h3 className="text-main dark:text-white font-bold text-sm uppercase tracking-wide group-hover:text-[#4A6FD4] transition-colors">
+                Traffic Split
+              </h3>
+            </div>
+            <span className="text-[10px] bg-surface-highlight text-main px-2.5 py-0.5 rounded-full border border-surface/50 font-mono">
+              Live Overview
+            </span>
           </div>
-          <div className="space-y-2 mt-2">
-            {trafficBreakdown.map(item => (
-              <div key={item.name} className="flex items-center justify-between text-xs font-mono">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ background: item.color }}></span>
-                  <span className="text-muted dark:text-gray-400">{item.name}</span>
-                </span>
-                <span className="font-bold" style={{ color: item.color }}>{item.value}</span>
+          <p className="text-muted dark:text-gray-500 text-xs font-mono mb-4">Threat mitigation ratio</p>
+          
+          {/* Minimal stacked bar representing traffic composition */}
+          <div className="flex-grow flex flex-col justify-center my-6 space-y-4 select-none">
+            <div className="space-y-1.5 font-mono text-xs">
+              <div className="flex justify-between font-bold text-main">
+                <span>Traffic Distribution</span>
+                <span className="text-muted">{onlineCount + totalPrevented + totalAlerts} Total</span>
               </div>
-            ))}
+              <div className="h-3 w-full bg-surface-highlight rounded-full overflow-hidden flex shadow-inner">
+                {/* Allowed */}
+                <div 
+                  className="h-full bg-[#FF8A00] transition-all duration-500" 
+                  style={{ width: `${Math.max(5, (onlineCount / (onlineCount + totalPrevented + totalAlerts || 1)) * 100)}%` }}
+                  title={`Allowed: ${onlineCount}`}
+                ></div>
+                {/* Blocked */}
+                <div 
+                  className="h-full bg-primary transition-all duration-500" 
+                  style={{ width: `${Math.max(5, (totalPrevented / (onlineCount + totalPrevented + totalAlerts || 1)) * 100)}%` }}
+                  title={`Blocked: ${totalPrevented}`}
+                ></div>
+                {/* Threats */}
+                <div 
+                  className="h-full bg-red-500 transition-all duration-500" 
+                  style={{ width: `${Math.max(5, (totalAlerts / (onlineCount + totalPrevented + totalAlerts || 1)) * 100)}%` }}
+                  title={`Threats: ${totalAlerts}`}
+                ></div>
+              </div>
+            </div>
+
+            {/* Muted Legends grid */}
+            <div className="grid grid-cols-3 gap-2 text-[10px] font-mono border border-surface rounded-2xl p-3 bg-surface/30">
+              <div className="text-center">
+                <span className="text-[#FF8A00] font-bold text-sm block">{onlineCount}</span>
+                <span className="text-muted uppercase text-[8px] tracking-wider block mt-0.5">Allowed</span>
+              </div>
+              <div className="text-center border-x border-surface">
+                <span className="text-primary font-bold text-sm block">{totalPrevented}</span>
+                <span className="text-muted uppercase text-[8px] tracking-wider block mt-0.5">Blocked</span>
+              </div>
+              <div className="text-center">
+                <span className="text-red-500 font-bold text-sm block">{totalAlerts}</span>
+                <span className="text-muted uppercase text-[8px] tracking-wider block mt-0.5">Threats</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Targets matching the reference */}
+          <div className="space-y-3 font-mono text-[11px] mt-4 pt-4 border-t border-surface/50 dark:border-surface-highlight/30">
+            <div className="space-y-1">
+              <div className="flex justify-between text-muted">
+                <span>Allowed Target</span>
+                <span className="font-bold text-main">92%</span>
+              </div>
+              <div className="h-1.5 w-full bg-surface-highlight rounded-full overflow-hidden">
+                <div className="h-full bg-[#FF8A00]" style={{ width: '92%' }}></div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-muted">
+                <span>Prevention Coverage</span>
+                <span className="font-bold text-main">67%</span>
+              </div>
+              <div className="h-1.5 w-full bg-surface-highlight rounded-full overflow-hidden">
+                <div className="h-full bg-[#4A6FD4]" style={{ width: '67%' }}></div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-muted">
+                <span>AI Confidence Target</span>
+                <span className="font-bold text-main">85%</span>
+              </div>
+              <div className="h-1.5 w-full bg-surface-highlight rounded-full overflow-hidden">
+                <div className="h-full bg-gray-400 dark:bg-gray-600" style={{ width: '85%' }}></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -267,7 +352,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         {/* IPS Threat Vectors */}
         <div
           onClick={() => onNavigate('threat-feed')}
-          className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 flex flex-col cursor-pointer hover:border-red-500/20 transition-all group"
+          className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl p-5 flex flex-col cursor-pointer hover:border-red-500/30 transition-all group shadow-sm"
         >
           <h3 className="text-main dark:text-white font-bold text-sm uppercase tracking-wide mb-1 group-hover:text-red-400 transition-colors">
             Prevention by Vector
@@ -286,9 +371,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                   <span className="text-muted dark:text-gray-300">{item.label}</span>
                   <span className="font-bold" style={{ color: item.color }}>{item.val}%</span>
                 </div>
-                <div className="h-1.5 w-full bg-surface-highlight dark:bg-surface-highlight overflow-hidden">
+                <div className="h-1.5 w-full bg-surface-highlight dark:bg-surface-highlight overflow-hidden rounded-full">
                   <div
-                    className="h-full transition-all duration-1000"
+                    className="h-full transition-all duration-1000 rounded-full"
                     style={{ width: `${item.val}%`, background: item.color }}
                   ></div>
                 </div>
@@ -298,7 +383,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* Recent Prevention Actions */}
-        <div className="lg:col-span-2 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight flex flex-col">
+        <div className="lg:col-span-2 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl flex flex-col shadow-sm overflow-hidden">
           <div className="p-5 border-b border-surface dark:border-surface-highlight flex items-center justify-between">
             <div>
               <h3 className="text-main dark:text-white font-bold text-sm uppercase tracking-wide">Recent IPS Actions</h3>
@@ -306,7 +391,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <button
               onClick={() => onNavigate('alerts')}
-              className="text-xs font-bold text-muted dark:text-gray-400 border border-surface dark:border-surface-highlight px-3 py-1 hover:text-main dark:hover:text-white hover:border-black dark:hover:border-white transition-all uppercase outline-none"
+              className="text-xs font-bold text-muted dark:text-gray-400 border border-surface dark:border-surface-highlight rounded-xl px-3 py-1 hover:text-[#4A6FD4] dark:hover:text-[#4A6FD4] hover:border-[#4A6FD4] dark:hover:border-[#4A6FD4] transition-all uppercase outline-none"
             >
               Full Log
             </button>
@@ -335,19 +420,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                         alert.risk === RiskLevel.HIGH ? 'text-orange-500' :
                         'text-yellow-500'
                       }`}>
-                        <span className={`size-1.5 ${alert.risk === RiskLevel.CRITICAL ? 'bg-red-500' : alert.risk === RiskLevel.HIGH ? 'bg-orange-500' : 'bg-yellow-500'}`}></span>
+                        <span className={`size-1.5 rounded-full ${alert.risk === RiskLevel.CRITICAL ? 'bg-red-500' : alert.risk === RiskLevel.HIGH ? 'bg-orange-500' : 'bg-yellow-500'}`}></span>
                         {alert.risk}
                       </span>
                     </td>
                     <td className="px-5 py-3 font-mono text-main dark:text-gray-300">{alert.device}</td>
                     <td className="px-5 py-3 text-muted dark:text-gray-400">{alert.threat}</td>
                     <td className="px-5 py-3">
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase px-2 py-0.5 border ${
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase px-2 py-0.5 border rounded-full ${
                         alert.actionTaken === 'blocked'
-                          ? 'text-red-400 border-red-500/30 bg-red-950/20'
+                          ? 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30'
                           : alert.actionTaken === 'prevented'
-                          ? 'text-emerald-400 border-emerald-500/30 bg-emerald-950/20'
-                          : 'text-orange-400 border-orange-500/30 bg-orange-950/20'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30'
+                          : 'bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-400 border-orange-200 dark:border-orange-900/30'
                       }`}>
                         <span className="material-symbols-outlined text-[12px] pixel-icon">
                           {alert.actionTaken === 'blocked' ? 'block' : alert.actionTaken === 'prevented' ? 'verified_user' : 'visibility'}

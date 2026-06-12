@@ -9,6 +9,9 @@ interface SidebarProps {
   currentUser: AuthUser | null;
   isAdmin: boolean;
   onLogout: () => void;
+  onUpgradeClick?: () => void;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 /** Intelli IPS brand cube SVG — matches the isometric cube logo */
@@ -43,6 +46,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
   isAdmin,
   onLogout,
+  onUpgradeClick,
+  mobileOpen,
+  onCloseMobile,
 }) => {
   const allNavItems = [
     { id: 'dashboard', label: 'Overview', icon: 'dashboard', adminOnly: false },
@@ -63,7 +69,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   const avatarInitials = displayName.slice(0, 2).toUpperCase();
 
   return (
-    <aside className="w-60 bg-background dark:bg-background-dark border-r border-surface dark:border-surface-highlight flex-col hidden md:flex z-20 shrink-0">
+    <aside className={`w-60 bg-background dark:bg-background-dark border-r border-surface dark:border-surface-highlight flex-col z-50 shrink-0 fixed md:relative inset-y-0 left-0 transition-transform duration-300 md:translate-x-0 ${
+      mobileOpen ? 'translate-x-0 flex' : '-translate-x-full md:flex hidden'
+    }`}>
       {/* Logo */}
       <div className="h-14 flex items-center px-5 border-b border-surface dark:border-surface-highlight gap-3 shrink-0">
         <IntelliLogo size={30} />
@@ -74,7 +82,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
         <p className="text-[10px] font-bold text-muted dark:text-gray-600 uppercase tracking-widest px-3 pb-2">Navigation</p>
         {navItems.map((item) => {
           const isActive = currentTab === item.id;
@@ -83,21 +91,24 @@ const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left relative outline-none ${
+              onClick={() => {
+                onTabChange(item.id);
+                if (onCloseMobile) onCloseMobile();
+              }}
+              className={`w-[calc(100%-16px)] mx-2 flex items-center gap-3 px-3.5 py-2.5 transition-all text-left relative outline-none rounded-xl ${
                 isActive
-                  ? 'bg-surface-highlight dark:bg-surface-highlight text-main dark:text-white'
-                  : 'text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:bg-surface-highlight dark:hover:bg-surface-highlight'
+                  ? 'bg-primary/15 text-primary dark:bg-primary/20 dark:text-blue-300 font-semibold'
+                  : 'text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:bg-surface-highlight/60'
               }`}
             >
-              {/* Active indicator stripe */}
-              {isActive && <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-main dark:bg-white"></span>}
-              {isRed && !isActive && <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500"></span>}
-              {isBlue && !isActive && <span className="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-500/60"></span>}
+              {/* Active / Highlight indicator stripe inside capsule */}
+              {isActive && <span className="absolute left-1 top-2.5 bottom-2.5 w-1 bg-primary rounded-full"></span>}
+              {isRed && !isActive && <span className="absolute left-1 top-2.5 bottom-2.5 w-1 bg-red-500 rounded-full"></span>}
+              {isBlue && !isActive && <span className="absolute left-1 top-2.5 bottom-2.5 w-1 bg-blue-500/60 rounded-full"></span>}
 
               <span
                 className={`material-symbols-outlined text-[20px] pixel-icon shrink-0 transition-colors ${
-                  isActive ? 'text-main dark:text-white' :
+                  isActive ? 'text-primary dark:text-blue-300' :
                   isRed ? 'text-red-400 animate-pulse' :
                   isBlue ? 'text-blue-400' :
                   'text-muted dark:text-gray-500'
@@ -108,7 +119,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </span>
               <span className="font-medium text-[13px]">{item.label}</span>
               {item.badge != null && item.badge > 0 && (
-                <span className="ml-auto bg-red-600 text-white text-[10px] font-mono px-1.5 py-0.5 min-w-[20px] text-center">
+                <span className="ml-auto bg-red-600 text-white text-[10px] font-mono px-1.5 py-0.5 min-w-[20px] text-center rounded-full">
                   {item.badge}
                 </span>
               )}
@@ -118,17 +129,21 @@ const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Bottom section */}
-      <div className="p-2 border-t border-surface dark:border-surface-highlight space-y-0.5">
+      <div className="p-2 border-t border-surface dark:border-surface-highlight space-y-1">
         {/* Settings — admin only */}
         {isAdmin && (
           <button
-            onClick={() => onTabChange('settings')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors outline-none ${
+            onClick={() => {
+              onTabChange('settings');
+              if (onCloseMobile) onCloseMobile();
+            }}
+            className={`w-[calc(100%-16px)] mx-2 flex items-center gap-3 px-3.5 py-2.5 transition-all outline-none rounded-xl ${
               currentTab === 'settings'
-                ? 'bg-surface-highlight dark:bg-surface-highlight text-main dark:text-white'
-                : 'text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:bg-surface-highlight dark:hover:bg-surface-highlight'
+                ? 'bg-primary/15 text-primary dark:bg-primary/20 dark:text-blue-300 font-semibold relative'
+                : 'text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:bg-surface-highlight/60'
             }`}
           >
+            {currentTab === 'settings' && <span className="absolute left-1 top-2.5 bottom-2.5 w-1 bg-primary rounded-full"></span>}
             <span
               className="material-symbols-outlined text-[20px] pixel-icon shrink-0"
               style={{ fontVariationSettings: currentTab === 'settings' ? "'FILL' 1" : "" }}
@@ -142,16 +157,16 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Logout button */}
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 transition-colors outline-none text-muted dark:text-gray-500 hover:text-red-400 hover:bg-red-950/20"
+          className="w-[calc(100%-16px)] mx-2 flex items-center gap-3 px-3.5 py-2 transition-all outline-none text-muted dark:text-gray-500 hover:text-red-400 hover:bg-red-950/20 rounded-xl"
         >
           <span className="material-symbols-outlined text-[20px] pixel-icon shrink-0">logout</span>
           <span className="font-medium text-[13px]">Sign Out</span>
         </button>
 
         {/* User card */}
-        <div className="mt-1 flex items-center gap-3 px-3 py-2.5 bg-surface/60 dark:bg-surface-dark/60 border border-surface dark:border-surface-highlight">
+        <div className="mt-2 mx-2 flex items-center gap-3 px-3 py-2.5 bg-surface/40 dark:bg-surface-dark/40 border border-surface/50 dark:border-surface-highlight/50 rounded-2xl">
           {/* Avatar with initials */}
-          <div className="size-7 bg-black dark:bg-white flex items-center justify-center text-white dark:text-black text-[10px] font-black shrink-0 select-none">
+          <div className="size-8 bg-gradient-to-tr from-primary to-blue-400 flex items-center justify-center text-white text-[11px] font-black shrink-0 select-none rounded-full">
             {avatarInitials}
           </div>
           <div className="flex flex-col overflow-hidden flex-1 min-w-0">
@@ -162,7 +177,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           {currentUser?.role === 'admin' && (
-            <span className="text-[8px] font-bold text-blue-400 border border-blue-500/30 px-1 py-0.5 shrink-0">ADMIN</span>
+            <span className="text-[8px] font-bold text-blue-400 border border-blue-500/30 px-1 py-0.5 shrink-0 rounded">ADMIN</span>
           )}
         </div>
       </div>

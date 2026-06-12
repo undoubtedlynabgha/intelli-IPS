@@ -204,7 +204,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
       </div>
 
       {/* AI Detection Insights Panel */}
-      <div className="border border-surface dark:border-surface-highlight bg-surface/20 dark:bg-surface-dark/20 p-6 space-y-6">
+      <div className="border border-surface dark:border-surface-highlight bg-surface/20 dark:bg-surface-dark/20 rounded-3xl p-6 space-y-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-surface dark:border-surface-highlight pb-4">
           <div>
             <h3 className="text-main dark:text-white font-bold uppercase tracking-widest text-sm flex items-center gap-2">
@@ -216,10 +216,10 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-bold uppercase ${
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 border text-[10px] font-bold uppercase rounded-lg ${
               isApiKeyConfigured()
-                ? 'bg-emerald-950 text-emerald-400 border-emerald-500' 
-                : 'bg-red-950 text-red-400 border-red-500'
+                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30' 
+                : 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30'
             }`}>
               <span className={`size-1.5 rounded-full ${
                 isApiKeyConfigured()
@@ -231,7 +231,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
             <button
               onClick={generateAiInsights}
               disabled={isGenerating}
-              className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black text-xs font-black uppercase hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center gap-2 outline-none disabled:bg-gray-700 disabled:text-gray-500 shrink-0"
+              className="px-4 py-2 bg-[#4A6FD4] hover:bg-[#3A5ECA] text-white text-xs font-black uppercase rounded-xl transition-all flex items-center gap-2 outline-none disabled:bg-surface disabled:text-gray-500 shrink-0 cursor-pointer shadow-sm hover:shadow-[0_0_12px_rgba(74,111,212,0.25)]"
             >
               <span className={`material-symbols-outlined text-sm ${isGenerating ? 'animate-spin' : ''}`}>
                 {isGenerating ? 'sync' : 'auto_awesome'}
@@ -244,7 +244,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Current telemetry parameters */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50 flex flex-col justify-between">
+            <div className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50 flex flex-col justify-between rounded-xl">
               <span className="text-[9px] text-muted dark:text-gray-500 font-bold uppercase mb-2 block font-mono">Detection Rate</span>
               <div>
                 <span className="text-3xl font-black text-main dark:text-white font-mono">
@@ -254,7 +254,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
               </div>
             </div>
 
-            <div className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50 flex flex-col justify-between">
+            <div className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50 flex flex-col justify-between rounded-xl">
               <span className="text-[9px] text-muted dark:text-gray-500 font-bold uppercase mb-2 block font-mono">False Positives</span>
               <div>
                 <span className="text-3xl font-black text-main dark:text-white font-mono">
@@ -266,7 +266,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
           </div>
 
           {/* Detailed insights report */}
-          <div className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50 min-h-[100px] flex items-center justify-center">
+          <div className="p-4 border border-surface dark:border-surface-highlight bg-background/50 dark:bg-black/50 min-h-[100px] flex items-center justify-center rounded-xl">
             {aiInsights ? (
               <p className="text-main dark:text-gray-300 font-mono text-xs leading-relaxed italic w-full">
                 "{aiInsights}"
@@ -282,7 +282,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
       </div>
 
       {/* Active Network Silos & Mitigations Panel */}
-      <div className="border border-surface dark:border-surface-highlight bg-surface/20 dark:bg-surface-dark/20 p-6">
+      <div className="border border-surface dark:border-surface-highlight bg-surface/20 dark:bg-surface-dark/20 rounded-3xl p-6 shadow-sm">
         <h3 className="text-main dark:text-white font-bold uppercase tracking-widest border-b border-surface dark:border-surface-highlight pb-3 text-sm flex items-center gap-2 mb-4">
           <span className="material-symbols-outlined text-[18px] text-red-500 pixel-icon">gpp_maybe</span>
           Active Network Silos & Mitigations
@@ -297,7 +297,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto border border-surface dark:border-surface-highlight">
+          <div className="overflow-x-auto border border-surface dark:border-surface-highlight rounded-2xl overflow-hidden shadow-inner">
             <table className="w-full text-left border-collapse">
               <thead className="bg-surface dark:bg-surface-dark text-[10px] font-bold uppercase text-muted dark:text-gray-500 font-mono tracking-wider border-b border-surface dark:border-surface-highlight">
                 <tr>
@@ -323,7 +323,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
                         <div className="text-[10px] text-muted dark:text-gray-500 mt-0.5">MAC: {device.mac || 'N/A'}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-red-500/30 bg-red-500/10 text-red-500 font-bold uppercase text-[9px]">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-red-500/30 bg-red-500/10 text-red-500 font-bold uppercase text-[9px] rounded-md">
                           <span className="size-1 bg-red-500 rounded-full animate-ping"></span>
                           {details.shield}
                         </span>
@@ -337,7 +337,7 @@ Keep your analysis concise (under 5 sentences), actionable, and highly professio
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => handleReauthorize(device.id, device.name, currentlyAllowed)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 uppercase text-[10px] transition-colors outline-none inline-flex items-center gap-1"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 uppercase text-[10px] transition-colors outline-none rounded-xl inline-flex items-center gap-1 cursor-pointer"
                         >
                           <span className="material-symbols-outlined text-[14px]">bolt</span>
                           Reauthorize

@@ -186,23 +186,23 @@ const MLEvalLab: React.FC<MLEvalLabProps> = ({ metrics, onNotify, backendConnect
               <div className="text-center font-bold text-muted dark:text-gray-500 uppercase tracking-widest text-[9px]">Pred Anomaly</div>
 
               <div className="font-bold text-muted dark:text-gray-500 flex items-center uppercase tracking-widest text-[9px]">Actual Normal</div>
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
-                <div className="text-lg font-black text-emerald-500">{matrix.tn}</div>
-                <div className="text-[8px] text-muted dark:text-gray-500 uppercase font-mono mt-0.5">True Negative (TN)</div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/10 border border-emerald-200 dark:border-emerald-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-emerald-100 dark:hover:bg-emerald-950/20">
+                <div className="text-lg font-black text-emerald-800 dark:text-emerald-500">{matrix.tn}</div>
+                <div className="text-[8px] text-gray-500 dark:text-muted uppercase font-mono mt-0.5">True Negative (TN)</div>
               </div>
-              <div className="bg-red-500/10 border border-red-500/20 p-3 text-center">
-                <div className="text-lg font-black text-red-500">{matrix.fp}</div>
-                <div className="text-[8px] text-muted dark:text-gray-500 uppercase font-mono mt-0.5">False Positive (FP)</div>
+              <div className="bg-red-50 dark:bg-red-950/10 border border-red-200 dark:border-red-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-950/20">
+                <div className="text-lg font-black text-red-800 dark:text-red-500">{matrix.fp}</div>
+                <div className="text-[8px] text-gray-500 dark:text-muted uppercase font-mono mt-0.5">False Positive (FP)</div>
               </div>
 
               <div className="font-bold text-muted dark:text-gray-500 flex items-center uppercase tracking-widest text-[9px]">Actual Anomaly</div>
-              <div className="bg-red-500/10 border border-red-500/20 p-3 text-center">
-                <div className="text-lg font-black text-red-500">{matrix.fn}</div>
-                <div className="text-[8px] text-muted dark:text-gray-500 uppercase font-mono mt-0.5">False Negative (FN)</div>
+              <div className="bg-red-50 dark:bg-red-950/10 border border-red-200 dark:border-red-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-950/20">
+                <div className="text-lg font-black text-red-800 dark:text-red-500">{matrix.fn}</div>
+                <div className="text-[8px] text-gray-500 dark:text-muted uppercase font-mono mt-0.5">False Negative (FN)</div>
               </div>
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
-                <div className="text-lg font-black text-emerald-500">{matrix.tp}</div>
-                <div className="text-[8px] text-muted dark:text-gray-500 uppercase font-mono mt-0.5">True Positive (TP)</div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/10 border border-emerald-200 dark:border-emerald-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-emerald-100 dark:hover:bg-emerald-950/20">
+                <div className="text-lg font-black text-emerald-800 dark:text-emerald-500">{matrix.tp}</div>
+                <div className="text-[8px] text-gray-500 dark:text-muted uppercase font-mono mt-0.5">True Positive (TP)</div>
               </div>
             </div>
             

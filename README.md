@@ -23,7 +23,7 @@ Intelli IPS is an AI-driven Intrusion Prevention System designed for IoT network
 ## 💻 Getting Started (For End Users)
 
 ### 1. Download & Install
-1. Go to the [Releases Page](https://github.com/undoubtedlynabgha/intelli-IPS/releases) and download the latest version (`Intelli.IPS.Setup.1.0.2.exe`).
+1. Go to the [Releases Page](https://github.com/undoubtedlynabgha/intelli-IPS/releases) and download the latest version (`Intelli.IPS.Setup.1.0.3.exe`).
 2. Run the installer and follow the prompts.
 3. Launch **Intelli IPS** from your Start Menu or Desktop.
 

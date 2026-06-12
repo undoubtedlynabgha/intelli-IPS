@@ -14,6 +14,7 @@ import Copilot from './components/Copilot';
 import { DEVICES as INITIAL_DEVICES } from './constants';
 import { Device, CopilotMessage } from './types';
 import { useIpsBackend } from './hooks/useIpsBackend';
+import UpgradePlansModal from './components/UpgradePlansModal';
 
 export interface Toast {
   id: number;
@@ -34,6 +35,8 @@ const AppInner: React.FC = () => {
   const [externalSelectedId, setExternalSelectedId] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([
     {
       sender: 'ai',
@@ -296,6 +299,7 @@ const AppInner: React.FC = () => {
             backendConnected={backendConnected}
             mode={mode}
             onToggleMode={setMode}
+            onUpgradeClick={() => setShowUpgradeModal(true)}
           />
         );
       default:
@@ -381,6 +385,13 @@ const AppInner: React.FC = () => {
         ))}
       </div>
 
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       <Sidebar
         currentTab={currentTab}
         onTabChange={setCurrentTab}
@@ -388,13 +399,16 @@ const AppInner: React.FC = () => {
         currentUser={currentUser}
         isAdmin={isAdmin}
         onLogout={logout}
+        onUpgradeClick={() => setShowUpgradeModal(true)}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
       <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-background dark:bg-black border-l border-surface dark:border-surface-highlight">
         <header className="h-14 flex flex-col justify-center px-5 border-b border-surface dark:border-surface-highlight bg-background dark:bg-black z-40 shrink-0 relative">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-3 text-main dark:text-white">
-              <button className="md:hidden text-gray-400 hover:text-white" onClick={() => addToast('Mobile menu toggled (demo)', 'info')}>
+              <button className="md:hidden text-gray-400 hover:text-white cursor-pointer outline-none flex items-center" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
                 <span className="material-symbols-outlined pixel-icon">menu</span>
               </button>
               <h2 className="text-sm font-bold tracking-wider hidden sm:block uppercase text-muted dark:text-gray-400">{getHeaderTitle()}</h2>
@@ -483,6 +497,16 @@ const AppInner: React.FC = () => {
 
         {renderContent()}
       </main>
+
+      {/* Premium Upgrade plans modal */}
+      <UpgradePlansModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onSelectPlan={(plan) => {
+          setShowUpgradeModal(false);
+          addToast(`Initiated license migration for: ${plan}`, 'success');
+        }}
+      />
     </div>
   );
 };

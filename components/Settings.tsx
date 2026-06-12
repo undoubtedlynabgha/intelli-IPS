@@ -12,6 +12,7 @@ interface SettingsProps {
   backendConnected?: boolean;
   mode?: 'simulation' | 'real';
   onToggleMode?: (mode: 'simulation' | 'real') => void;
+  onUpgradeClick?: () => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({
@@ -23,6 +24,7 @@ const Settings: React.FC<SettingsProps> = ({
   backendConnected = false,
   mode = 'simulation',
   onToggleMode,
+  onUpgradeClick,
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [deviceName, setDeviceName] = useState('');
@@ -96,11 +98,11 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
             <p className="text-muted dark:text-gray-500 text-xs font-mono uppercase tracking-widest">Toggle between simulating virtual IoT networks and monitoring your real local subnet devices</p>
 
-            <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
               <div>
                 <p className="text-sm font-bold text-main dark:text-white uppercase">Network Source Mode</p>
                 <p className="text-xs text-muted dark:text-gray-500 mt-1 font-mono">
-                  Currently active: <strong className={mode === 'real' ? 'text-blue-400 font-bold' : 'text-yellow-500 font-bold'}>{mode === 'real' ? 'REAL NETWORK MONITORING' : 'SIMULATION MODE'}</strong>
+                  Currently active: <strong className={mode === 'real' ? 'text-blue-400 font-bold' : 'text-[#FF8A00] font-bold'}>{mode === 'real' ? 'REAL NETWORK MONITORING' : 'SIMULATION MODE'}</strong>
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -116,9 +118,9 @@ const Settings: React.FC<SettingsProps> = ({
                       }
                     }
                   }}
-                  className={`h-9 px-4 text-xs font-bold font-mono uppercase transition-all cursor-pointer ${
+                  className={`h-9 px-4 text-xs font-bold font-mono uppercase rounded-xl transition-all cursor-pointer ${
                     mode === 'simulation'
-                      ? 'bg-yellow-600 text-white'
+                      ? 'bg-[#FF8A00] text-white font-bold'
                       : 'border border-surface dark:border-surface-highlight text-muted hover:text-main dark:hover:text-white bg-transparent'
                   }`}
                 >
@@ -136,9 +138,9 @@ const Settings: React.FC<SettingsProps> = ({
                       }
                     }
                   }}
-                  className={`h-9 px-4 text-xs font-bold font-mono uppercase transition-all cursor-pointer ${
+                  className={`h-9 px-4 text-xs font-bold font-mono uppercase rounded-xl transition-all cursor-pointer ${
                     mode === 'real'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-[#4A6FD4] text-white font-bold'
                       : 'border border-surface dark:border-surface-highlight text-muted hover:text-main dark:hover:text-white bg-transparent'
                   }`}
                 >
@@ -156,7 +158,7 @@ const Settings: React.FC<SettingsProps> = ({
             <h2 className="text-main dark:text-white font-bold text-sm uppercase tracking-widest">Appearance</h2>
             <div className="h-px flex-1 bg-surface dark:bg-surface-highlight"></div>
           </div>
-          <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 flex items-center justify-between">
+          <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl p-5 flex items-center justify-between shadow-sm">
             <div>
               <p className="text-sm font-bold text-main dark:text-white uppercase">Display Theme</p>
               <p className="text-xs text-muted dark:text-gray-500 mt-1 font-mono">Currently: {theme === 'light' ? 'Light Mode' : 'Dark Mode'}</p>
@@ -166,10 +168,42 @@ const Settings: React.FC<SettingsProps> = ({
                 toggleTheme();
                 onNotify(`Switched to ${theme === 'light' ? 'dark' : 'light'} theme`, 'success');
               }}
-              className={`w-12 h-6 relative transition-colors duration-300 rounded-full ${theme === 'dark' ? 'bg-blue-600' : 'bg-gray-300'}`}
+              className={`w-12 h-6 relative transition-colors duration-300 rounded-full ${theme === 'dark' ? 'bg-[#4A6FD4]' : 'bg-gray-300'}`}
             >
               <div className={`absolute top-0.5 size-5 bg-white rounded-full transition-all duration-300 shadow-md ${theme === 'dark' ? 'left-6' : 'left-0.5'}`}></div>
             </button>
+          </div>
+        </section>
+
+        {/* License Management */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-muted dark:text-gray-400 text-[18px]">verified</span>
+            <h2 className="text-main dark:text-white font-bold text-sm uppercase tracking-widest">License & Plan</h2>
+            <div className="h-px flex-1 bg-surface dark:bg-surface-highlight"></div>
+          </div>
+          <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+            <div>
+              <p className="text-sm font-bold text-main dark:text-white uppercase flex items-center gap-2">
+                Standard Analyst License
+                <span className="text-[9px] bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-full font-mono uppercase tracking-wider font-bold">
+                  Demo Mode
+                </span>
+              </p>
+              <p className="text-xs text-muted dark:text-gray-500 mt-1.5 font-mono max-w-md">
+                Standard local analytics enabled. Upgrade to a premium plan to unlock multi-subnet sweeps, SDN mitigation triggers, and dedicated AI briefing reports.
+              </p>
+            </div>
+            {onUpgradeClick && (
+              <button
+                type="button"
+                onClick={onUpgradeClick}
+                className="px-5 py-2.5 bg-primary/10 border border-primary/30 hover:bg-primary hover:text-white text-primary dark:text-blue-300 hover:shadow-lg hover:shadow-primary/15 text-xs font-black uppercase rounded-xl flex items-center justify-center gap-2 outline-none transition-all cursor-pointer shrink-0"
+              >
+                <span className="material-symbols-outlined text-[15px]">crown</span>
+                Upgrade Plan
+              </button>
+            )}
           </div>
         </section>
 
@@ -182,7 +216,7 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
           <p className="text-muted dark:text-gray-500 text-xs font-mono uppercase tracking-widest">Authorize a new IoT node into the secure network mesh</p>
 
-          <form onSubmit={handleSubmit} className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight p-5 space-y-4">
+          <form onSubmit={handleSubmit} className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl p-5 space-y-4 shadow-sm">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-muted dark:text-gray-400 uppercase tracking-wider">Device Label</label>
@@ -191,7 +225,7 @@ const Settings: React.FC<SettingsProps> = ({
                   value={deviceName}
                   onChange={e => setDeviceName(e.target.value)}
                   placeholder="e.g. PRESSURE_VALVE_01"
-                  className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-sm h-9 px-3 outline-none transition-all font-mono"
+                  className="w-full bg-white dark:bg-neutral-900 border border-surface rounded-xl focus:border-[#4A6FD4] dark:focus:border-[#4A6FD4] text-black dark:text-white text-sm h-9 px-3 outline-none transition-all font-mono"
                 />
               </div>
               <div className="space-y-1.5">
@@ -199,7 +233,7 @@ const Settings: React.FC<SettingsProps> = ({
                 <select
                   value={deviceType}
                   onChange={e => setDeviceType(e.target.value)}
-                  className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-sm h-9 px-3 outline-none transition-all"
+                  className="w-full bg-white dark:bg-neutral-900 border border-surface rounded-xl focus:border-[#4A6FD4] dark:focus:border-[#4A6FD4] text-black dark:text-white text-sm h-9 px-3 outline-none transition-all"
                 >
                   <option value="sensors">Sensor Array</option>
                   <option value="videocam">Surveillance Node</option>
@@ -219,7 +253,7 @@ const Settings: React.FC<SettingsProps> = ({
                   type="text"
                   value={deviceIp}
                   onChange={e => setDeviceIp(e.target.value)}
-                  className="w-full bg-background dark:bg-black border border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white text-main dark:text-white text-sm h-9 px-3 outline-none transition-all font-mono"
+                  className="w-full bg-white dark:bg-neutral-900 border border-surface rounded-xl focus:border-[#4A6FD4] dark:focus:border-[#4A6FD4] text-black dark:text-white text-sm h-9 px-3 outline-none transition-all font-mono"
                 />
               </div>
               <div className="md:col-span-2 flex items-center gap-2">
@@ -237,7 +271,7 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
             <button
               type="submit"
-              className="w-full bg-black dark:bg-white text-white dark:text-black font-black uppercase text-xs h-10 hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center gap-2 outline-none tracking-wider"
+              className="w-full bg-[#4A6FD4] hover:bg-[#3A5ECA] text-white font-black uppercase text-xs h-10 transition-all flex items-center justify-center gap-2 outline-none rounded-xl tracking-wider shadow"
             >
               <span className="material-symbols-outlined text-[17px]">add_circle</span>
               Commission Device
@@ -254,7 +288,7 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
           <p className="text-muted dark:text-gray-500 text-xs font-mono uppercase tracking-widest">Manage traffic permissions per node — allow or prevent connections</p>
 
-          <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight overflow-hidden">
+          <div className="bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-3xl overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="bg-surface-highlight dark:bg-surface-highlight text-muted dark:text-gray-400 uppercase font-bold tracking-wider">
@@ -327,10 +361,10 @@ const Settings: React.FC<SettingsProps> = ({
                           />
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-bold uppercase ${
-                            device.status === 'blocked' ? 'bg-red-950/50 text-red-400 border-red-500/50' :
-                            device.status === 'threat' ? 'bg-orange-950/50 text-orange-400 border-orange-500/50 animate-pulse' :
-                            'bg-emerald-950/30 text-emerald-400 border-emerald-500/30'
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-bold uppercase rounded-md ${
+                            device.status === 'blocked' ? 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30' :
+                            device.status === 'threat' ? 'bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-400 border-orange-200 dark:border-orange-900/30 animate-pulse' :
+                            'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30'
                           }`}>
                             <span className={`size-1.5 rounded-full ${
                               device.status === 'blocked' ? 'bg-red-500' :
@@ -345,14 +379,14 @@ const Settings: React.FC<SettingsProps> = ({
                             {device.status === 'blocked' ? (
                               <button
                                 onClick={handleUnblock}
-                                className="bg-emerald-700/80 hover:bg-emerald-600 text-white text-[10px] font-bold px-3 py-1.5 transition-colors uppercase outline-none border border-emerald-600/30"
+                                className="bg-emerald-700/80 hover:bg-emerald-600 text-white text-[10px] font-bold px-3 py-1.5 transition-colors uppercase outline-none rounded-xl border border-emerald-600/30 shadow-sm cursor-pointer"
                               >
                                 Allow
                               </button>
                             ) : (
                               <button
                                 onClick={handleBlock}
-                                className="bg-red-700/80 hover:bg-red-600 text-white text-[10px] font-bold px-3 py-1.5 transition-colors uppercase outline-none border border-red-600/30"
+                                className="bg-red-700/80 hover:bg-red-600 text-white text-[10px] font-bold px-3 py-1.5 transition-colors uppercase outline-none rounded-xl border border-red-600/30 shadow-sm cursor-pointer"
                               >
                                 Prevent
                               </button>
@@ -371,7 +405,7 @@ const Settings: React.FC<SettingsProps> = ({
                                   }
                                 }}
                                 title="Decommission device"
-                                className="bg-surface hover:bg-red-950/20 hover:text-red-400 border border-surface dark:border-surface-highlight hover:border-red-500/30 text-muted dark:text-gray-400 p-1.5 transition-colors outline-none cursor-pointer"
+                                className="bg-surface hover:bg-red-950/20 hover:text-red-400 border border-surface dark:border-surface-highlight hover:border-red-500/30 rounded-xl text-muted dark:text-gray-400 p-1.5 transition-colors outline-none cursor-pointer"
                               >
                                 <span className="material-symbols-outlined text-[15px] pixel-icon">delete</span>
                               </button>
@@ -388,7 +422,7 @@ const Settings: React.FC<SettingsProps> = ({
         </section>
 
         {/* Info callout pointing to Network tab */}
-        <div className="flex items-start gap-3 p-4 bg-blue-950/20 border border-blue-500/20">
+        <div className="flex items-start gap-3 p-4 bg-primary/5 border border-primary/20 rounded-3xl">
           <span className="material-symbols-outlined text-blue-400 text-[20px] shrink-0">info</span>
           <div>
             <p className="text-xs font-bold text-blue-400 uppercase mb-1">Simulation Lab</p>

@@ -74,21 +74,23 @@ const SimulationLab: React.FC<SimulationLabProps> = ({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <span
-          className={`text-[10px] font-bold uppercase px-2 py-1 border ${
+          className={`text-[10px] font-bold uppercase px-2.5 py-1 border rounded-lg ${
             running
-              ? 'bg-emerald-950 text-emerald-400 border-emerald-500'
+              ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30'
               : 'bg-surface dark:bg-surface-dark text-muted border-surface dark:border-surface-highlight'
           }`}
         >
           {running ? 'Simulation Active' : 'Simulation Stopped'}
         </span>
         {activeAttack && (
-          <span className="text-[10px] font-bold uppercase px-2 py-1 border bg-red-950 text-red-400 border-red-500 animate-pulse">
+          <span className="text-[10px] font-bold uppercase px-2.5 py-1 border bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30 animate-pulse rounded-lg">
             Attack: {activeAttack}
           </span>
         )}
         {mlTrained && (
-          <span className="text-[10px] font-mono text-blue-400">ML baseline trained</span>
+          <span className="text-[10px] font-bold uppercase px-2.5 py-1 border bg-blue-50 dark:bg-blue-950/20 text-blue-800 dark:text-blue-400 border-blue-200 dark:border-blue-900/30 rounded-lg">
+            ML baseline trained
+          </span>
         )}
       </div>
 

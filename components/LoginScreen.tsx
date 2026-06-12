@@ -56,16 +56,16 @@ const LoginScreen: React.FC = () => {
         style={shake ? { animation: 'shake 0.5s ease-in-out' } : {}}
       >
         {/* Card glow border */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 via-transparent to-emerald-500/10 rounded-none blur-sm -m-px pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/30 via-transparent to-emerald-500/10 rounded-2xl blur-md -m-px pointer-events-none" />
 
-        <div className="relative bg-[#0a0a0a] border border-white/10 p-8 shadow-2xl">
+        <div className="relative bg-[#0a0a0a]/90 backdrop-blur-md border border-white/10 p-8 shadow-2xl rounded-2xl">
 
           {/* Header */}
           <div className="flex flex-col items-center gap-4 mb-8">
             <div className="relative">
-              <div className="absolute inset-0 bg-white/10 blur-xl rounded-full" />
-              <div className="relative w-14 h-14 bg-white flex items-center justify-center shadow-2xl">
-                <span className="material-symbols-outlined text-black text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+              <div className="absolute inset-0 bg-[#4A6FD4]/20 blur-xl rounded-full" />
+              <div className="relative w-14 h-14 bg-gradient-to-tr from-[#1a1a4e] to-[#4A6FD4] border border-[#4A6FD4]/30 rounded-2xl flex items-center justify-center shadow-2xl">
+                <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
                   security
                 </span>
               </div>
@@ -92,7 +92,7 @@ const LoginScreen: React.FC = () => {
                   placeholder="admin or user"
                   autoFocus
                   autoComplete="username"
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-700 text-sm h-10 pl-9 pr-4 outline-none focus:border-white/30 focus:bg-white/8 transition-all font-mono"
+                  className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-750 text-sm h-10 pl-9 pr-4 rounded-xl outline-none focus:border-[#4A6FD4]/50 focus:bg-white/8 transition-all font-mono"
                   disabled={loading}
                 />
               </div>
@@ -111,7 +111,7 @@ const LoginScreen: React.FC = () => {
                   onChange={e => { setPassword(e.target.value); setError(null); }}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-700 text-sm h-10 pl-9 pr-10 outline-none focus:border-white/30 focus:bg-white/8 transition-all font-mono"
+                  className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-750 text-sm h-10 pl-9 pr-10 rounded-xl outline-none focus:border-[#4A6FD4]/50 focus:bg-white/8 transition-all font-mono"
                   disabled={loading}
                 />
                 <button
@@ -129,7 +129,7 @@ const LoginScreen: React.FC = () => {
 
             {/* Error */}
             {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-950/40 border border-red-500/30 text-red-400 text-xs font-mono animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 p-3 bg-red-950/40 border border-red-500/30 text-red-400 text-xs font-mono rounded-xl animate-in fade-in duration-200">
                 <span className="material-symbols-outlined text-[14px] shrink-0">dangerous</span>
                 {error}
               </div>
@@ -139,7 +139,7 @@ const LoginScreen: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-10 bg-white hover:bg-gray-100 text-black text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 shadow-lg"
+              className="w-full h-10 bg-[#4A6FD4] hover:bg-[#3A5ECA] text-white text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2 shadow-lg rounded-xl"
             >
               {loading ? (
                 <>

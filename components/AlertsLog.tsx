@@ -152,17 +152,17 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
           <div className="h-4 w-px bg-surface dark:bg-surface-highlight"></div>
           <button 
             onClick={() => setShowFilterRow(!showFilterRow)}
-            className={`flex items-center gap-2 text-xs font-mono px-3 py-1.5 border transition-all outline-none ${
+            className={`flex items-center gap-2 text-xs font-mono px-3 py-1.5 border rounded-xl transition-all outline-none cursor-pointer ${
               showFilterRow || riskFilter !== 'ALL'
-                ? 'bg-surface-highlight dark:bg-surface-highlight text-main dark:text-white border-black/10 dark:border-white/10 font-bold'
-                : 'border-transparent text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-surface dark:hover:border-surface-highlight'
+                ? 'bg-primary text-white border-primary font-bold shadow-sm'
+                : 'border-transparent text-muted dark:text-gray-400 hover:text-primary dark:hover:text-blue-300 hover:border-primary/30'
             }`}
           >
             <span className="material-symbols-outlined text-[16px] pixel-icon">filter_list</span> FILTER
           </button>
           <button 
             onClick={handleExportCSV}
-            className="flex items-center gap-2 text-xs font-mono text-muted dark:text-gray-400 hover:text-main dark:hover:text-white px-3 py-1.5 border border-transparent hover:border-surface dark:hover:border-surface-highlight transition-all outline-none"
+            className="flex items-center gap-2 text-xs font-mono text-muted dark:text-gray-400 hover:text-primary dark:hover:text-blue-300 px-3 py-1.5 border border-transparent hover:border-primary/30 rounded-xl transition-all outline-none cursor-pointer"
           >
             <span className="material-symbols-outlined text-[16px] pixel-icon">download</span> EXPORT
           </button>
@@ -176,10 +176,10 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
             <button
               key={risk}
               onClick={() => setRiskFilter(risk)}
-              className={`text-[10px] font-mono px-2 py-0.5 border transition-all ${
+              className={`text-[10px] font-mono px-2.5 py-1 border rounded-xl transition-all cursor-pointer ${
                 riskFilter === risk 
-                  ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white font-bold' 
-                  : 'text-muted dark:text-gray-500 border-surface dark:border-surface-highlight hover:text-main dark:hover:text-white'
+                  ? 'bg-primary text-white border-primary font-bold' 
+                  : 'text-muted dark:text-gray-500 border-surface dark:border-surface-highlight hover:text-primary dark:hover:text-blue-300'
               }`}
             >
               {risk}
@@ -188,9 +188,10 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
         </div>
       )}
       
-      <div className="overflow-auto flex-1 w-full h-full">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-surface dark:bg-surface-dark sticky top-0 z-20 text-[10px] font-bold uppercase text-muted dark:text-gray-500 font-mono tracking-wider border-b border-surface dark:border-surface-highlight shadow-sm">
+      <div className="overflow-auto flex-1 w-full h-full p-4 md:p-6 bg-background dark:bg-black">
+        <div className="border border-surface dark:border-surface-highlight rounded-3xl overflow-hidden bg-surface dark:bg-surface-dark shadow-sm">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-surface-highlight/40 dark:bg-surface-dark sticky top-0 z-20 text-[10px] font-bold uppercase text-muted dark:text-gray-500 font-mono tracking-wider border-b border-surface dark:border-surface-highlight shadow-sm">
             <tr>
               <th className="px-6 py-4">Risk / Prevention Status</th>
               <th className="px-6 py-4">Timestamp</th>
@@ -204,7 +205,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
               <tr key={alert.id} onClick={() => handleDetails(alert)} className="group hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer">
                 <td className="px-6 py-4 align-top whitespace-nowrap">
                   <div className={`flex flex-col gap-1`}>
-                    <div className={`inline-flex items-center gap-2 px-2 py-1 border ${
+                    <div className={`inline-flex items-center gap-2 px-2.5 py-1 border rounded-xl ${
                       alert.risk === RiskLevel.CRITICAL ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white' : 'bg-surface-highlight dark:bg-surface-highlight text-main dark:text-white border-surface-highlight dark:border-surface-highlight'
                     }`}>
                       <span className="material-symbols-outlined text-[16px] pixel-icon" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -212,15 +213,16 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
                       </span>
                       <span className="text-xs font-bold uppercase tracking-tight">{alert.risk}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 px-2 mt-1">
-                      <span className={`size-1.5 rounded-full ${
-                        alert.actionTaken === 'blocked' ? 'bg-red-500' : 
-                        alert.actionTaken === 'prevented' ? 'bg-emerald-500' : 'bg-orange-500'
-                      }`}></span>
-                      <span className={`text-[10px] font-bold uppercase ${
-                        alert.actionTaken === 'blocked' ? 'text-red-500' : 
-                        alert.actionTaken === 'prevented' ? 'text-emerald-500' : 'text-orange-500'
+                    <div className="mt-1.5 flex">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-bold uppercase rounded-md ${
+                        alert.actionTaken === 'blocked' ? 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30' :
+                        alert.actionTaken === 'prevented' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30' :
+                        'bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-400 border-orange-200 dark:border-orange-900/30'
                       }`}>
+                        <span className={`size-1.5 rounded-full ${
+                          alert.actionTaken === 'blocked' ? 'bg-red-500' : 
+                          alert.actionTaken === 'prevented' ? 'bg-emerald-500' : 'bg-orange-500'
+                        }`}></span>
                         {alert.actionTaken || 'Detected'}
                       </span>
                     </div>
@@ -236,9 +238,9 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
                 <td className="px-6 py-4 align-top">
                   <div className="text-main dark:text-white font-bold mb-1">{alert.threat}</div>
                   <p className="text-xs text-muted dark:text-gray-400 leading-relaxed max-w-md">{alert.description}</p>
-                  <div className="mt-2 flex gap-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {alert.tags.map(tag => (
-                      <span key={tag} className="text-[10px] uppercase border border-black/20 dark:border-white/20 px-1.5 py-0.5 text-muted dark:text-gray-400">{tag}</span>
+                      <span key={tag} className="text-[10px] uppercase border border-black/10 dark:border-white/10 rounded-full px-2.5 py-0.5 text-muted dark:text-gray-400 bg-surface-highlight/30">{tag}</span>
                     ))}
                   </div>
                 </td>
@@ -246,13 +248,13 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
                   <div className="flex justify-end gap-2 opacity-80 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
                     <button 
                       onClick={() => handleQuarantine(alert.deviceId, alert.device)}
-                      className="bg-surface dark:bg-surface-dark hover:bg-orange-500 hover:text-white border border-surface dark:border-surface-highlight hover:border-orange-500 text-muted dark:text-gray-400 text-[10px] font-bold px-2.5 py-1.5 uppercase transition-colors outline-none"
+                      className="bg-surface dark:bg-surface-dark hover:bg-orange-500 hover:text-white border border-surface dark:border-surface-highlight rounded-xl hover:border-orange-500 text-muted dark:text-gray-400 text-[10px] font-bold px-3 py-1.5 uppercase transition-colors outline-none cursor-pointer"
                     >
                       Block Device
                     </button>
                     <button 
                       onClick={() => handleBlock(alert.deviceId, alert.device)}
-                      className="bg-surface dark:bg-surface-dark hover:bg-red-600 hover:text-white border border-surface dark:border-surface-highlight hover:border-red-600 text-muted dark:text-gray-400 text-[10px] font-bold px-2.5 py-1.5 uppercase transition-colors outline-none"
+                      className="bg-surface dark:bg-surface-dark hover:bg-red-600 hover:text-white border border-surface dark:border-surface-highlight rounded-xl hover:border-red-600 text-muted dark:text-gray-400 text-[10px] font-bold px-3 py-1.5 uppercase transition-colors outline-none cursor-pointer"
                     >
                       Block IP
                     </button>
@@ -267,10 +269,11 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
           {backendConnected ? ' • Live from IPS API' : ' • Demo data'}
         </div>
       </div>
-      {/* Alert Details Modal */}
+    </div>
+      {/* Alert Diagnostics Modal */}
       {selectedAlert && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/75 backdrop-blur-sm">
-          <div className="bg-background dark:bg-[#0a0a0a] border border-surface dark:border-surface-highlight p-6 w-[400px] shadow-2xl animate-in fade-in zoom-in-95 duration-200 font-mono text-main dark:text-white">
+          <div className="bg-surface dark:bg-[#0d0d0d] border border-surface dark:border-surface-highlight rounded-3xl p-6 w-[400px] shadow-2xl animate-in fade-in zoom-in-95 duration-200 font-mono text-main dark:text-white">
             <div className="flex justify-between items-center border-b border-surface dark:border-surface-highlight pb-3 mb-4">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-red-500 text-lg">gpp_maybe</span>
@@ -332,7 +335,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
                         <span>{val}%</span>
                       </div>
                       <div className="h-1.5 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${val}%` }}></div>
+                        <div className="h-full bg-[#4A6FD4] transition-all duration-500" style={{ width: `${val}%` }}></div>
                       </div>
                     </div>
                   ))}
@@ -348,7 +351,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
                       href={ipsApi.getFirewallScriptUrl(selectedAlert.source_ip, 'windows')}
                       download
                       onClick={e => e.stopPropagation()}
-                      className="flex-1 py-2 text-[10px] font-bold text-center border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-blue-500/40 uppercase transition-all flex items-center justify-center gap-1.5 outline-none"
+                      className="flex-1 py-2 text-[10px] font-bold text-center border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-[#4A6FD4] hover:bg-[#4A6FD4]/5 hover:border-[#4A6FD4] rounded-xl uppercase transition-all flex items-center justify-center gap-1.5 outline-none cursor-pointer"
                     >
                       <span className="material-symbols-outlined text-sm">terminal</span>
                       PowerShell
@@ -357,7 +360,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
                       href={ipsApi.getFirewallScriptUrl(selectedAlert.source_ip, 'linux')}
                       download
                       onClick={e => e.stopPropagation()}
-                      className="flex-1 py-2 text-[10px] font-bold text-center border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-blue-500/40 uppercase transition-all flex items-center justify-center gap-1.5 outline-none"
+                      className="flex-1 py-2 text-[10px] font-bold text-center border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-[#4A6FD4] hover:bg-[#4A6FD4]/5 hover:border-[#4A6FD4] rounded-xl uppercase transition-all flex items-center justify-center gap-1.5 outline-none cursor-pointer"
                     >
                       <span className="material-symbols-outlined text-sm">terminal</span>
                       Linux Bash
@@ -370,7 +373,7 @@ const AlertsLog: React.FC<AlertsLogProps> = ({ onNotify, alerts: liveAlerts, bac
             <div className="mt-6 flex gap-2">
               <button
                 onClick={() => setSelectedAlert(null)}
-                className="w-full py-2 bg-surface dark:bg-surface-dark border border-surface dark:border-surface-highlight text-xs font-bold uppercase transition-colors outline-none"
+                className="w-full py-2.5 bg-surface-highlight hover:border-primary border border-surface dark:border-surface-highlight text-xs font-bold uppercase rounded-xl transition-colors outline-none cursor-pointer"
               >
                 Close Diagnostics
               </button>

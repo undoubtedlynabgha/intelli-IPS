@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
+import { LineChart, Line, AreaChart, Area, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import Groq from "groq-sdk";
 import { ipsApi } from '../services/ipsApi';
 
@@ -129,6 +129,76 @@ Provide an executive, non-technical security summary and analysis of this statis
     }
   };
 
+  const handleExportCsv = () => {
+    onNotify('Compiling detailed analytics report in CSV format...', 'info');
+
+    let csvContent = "\uFEFF"; // Byte Order Mark for Excel UTF-8 compliance
+    csvContent += "INTELLI IPS - SYSTEM PREVENTION ANALYTICS REPORT\r\n";
+    csvContent += `Generated Time,${new Date().toLocaleString()}\r\n`;
+    csvContent += `Model Active,${metrics?.ml_model_trained ? 'YES' : 'NO'}\r\n\r\n`;
+
+    // 1. Overview Metrics
+    csvContent += "SECTION 1: SYSTEM MITIGATION & PERFORMANCE METRICS\r\n";
+    csvContent += "Metric Label,Metric Value,Security Status\r\n";
+    csvContent += `Total Packets Routed,${metrics?.total_packets ?? 35292},NOMINAL\r\n`;
+    csvContent += `Alerts Triggered,${metrics?.total_alerts ?? 12},${(metrics?.total_alerts ?? 0) > 0 ? 'WARNING' : 'NOMINAL'}\r\n`;
+    csvContent += `Quarantined Devices,${metrics?.quarantined_devices?.length ?? 0},${(metrics?.quarantined_devices?.length ?? 0) > 0 ? 'ISOLATED' : 'NOMINAL'}\r\n`;
+    csvContent += `Blocked IP Addresses,${metrics?.blocked_ips?.length ?? 0},${(metrics?.blocked_ips?.length ?? 0) > 0 ? 'BLOCKED' : 'NOMINAL'}\r\n`;
+    csvContent += `Detection Rate,${metrics?.detection_rate != null ? Math.round(metrics.detection_rate) + "%" : "98%"},NOMINAL\r\n`;
+    csvContent += `False Positive Rate,${metrics?.false_positive_rate != null ? Math.round(metrics.false_positive_rate) + "%" : "2%"},NOMINAL\r\n\r\n`;
+
+    // 2. Confusion Matrix
+    csvContent += "SECTION 2: ML MODEL CONFUSION MATRIX TELEMETRY\r\n";
+    csvContent += "Classification Class,Count Value,Description\r\n";
+    csvContent += `True Negatives (TN),${metrics?.confusion_matrix?.tn ?? 282},Actual normal traffic correctly allowed\r\n`;
+    csvContent += `False Positives (FP),${metrics?.confusion_matrix?.fp ?? 11},Normal traffic mistakenly flagged as anomaly\r\n`;
+    csvContent += `False Negatives (FN),${metrics?.confusion_matrix?.fn ?? 16},Attack vector missed by ML model\r\n`;
+    csvContent += `True Positives (TP),${metrics?.confusion_matrix?.tp ?? 138},Attack vector correctly blocked\r\n\r\n`;
+
+    // 3. Weekly Trends
+    csvContent += "SECTION 3: HISTORICAL WEEKLY TRAFFIC TRENDS\r\n";
+    csvContent += "Day of Week,Allowed Traffic Volume,Prevented Traffic Volume,IPS Accuracy Rate\r\n";
+    const trendData = [
+      { day: 'Mon', allowed: 1200, prevented: 180, rate: 94 },
+      { day: 'Tue', allowed: 1500, prevented: 220, rate: 96 },
+      { day: 'Wed', allowed: 1800, prevented: 150, rate: 98 },
+      { day: 'Thu', allowed: 1400, prevented: 310, rate: 95 },
+      { day: 'Fri', allowed: 2200, prevented: 110, rate: 99 },
+      { day: 'Sat', allowed: 2500, prevented: 90, rate: 99 },
+      { day: 'Sun', allowed: 2100, prevented: 140, rate: 97 },
+    ];
+    trendData.forEach(row => {
+      csvContent += `${row.day},${row.allowed},${row.prevented},${row.rate}%\r\n`;
+    });
+    csvContent += "\r\n";
+
+    // 4. Run Archive
+    csvContent += "SECTION 4: SIMULATION RUNS HISTORICAL RECORD LOGS\r\n";
+    csvContent += "Run ID,Timestamp,Scenario Vector,Target Node,Detection Engine,Prevention Delay,Status\r\n";
+    const runs = [
+      { id: 'RUN-4091', timestamp: '14:28:10', scenario: 'Mirai Botnet DDoS', target: 'IoT_Gateway_Main', detector: 'Isolation Forest (ML)', delay: '21ms', status: 'MITIGATED' },
+      { id: 'RUN-4090', timestamp: '13:05:44', scenario: 'HVAC Sensor Spoofing', target: 'HVAC_Main', detector: 'Isolation Forest (ML)', delay: '18ms', status: 'MITIGATED' },
+      { id: 'RUN-4089', timestamp: '11:42:01', scenario: 'Lock Brute Force', target: 'Door_Rear', detector: 'Legacy Signatures', delay: '85ms', status: 'MITIGATED' },
+      { id: 'RUN-4088', timestamp: '09:12:15', scenario: 'Traffic Surge Anomaly', target: 'CAM_EXT_04', detector: 'Isolation Forest (ML)', delay: '23ms', status: 'MITIGATED' },
+      { id: 'RUN-4087', timestamp: '08:30:52', scenario: 'CoAP Amplification DDoS', target: 'IoT_Gateway_Main', detector: 'Legacy Signatures', delay: '92ms', status: 'MITIGATED' },
+    ];
+    runs.forEach(r => {
+      csvContent += `${r.id},${r.timestamp},"${r.scenario.replace(/"/g, '""')}",${r.target},"${r.detector.replace(/"/g, '""')}",${r.delay},${r.status}\r\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `intelli_ips_analytics_capture_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    onNotify('CSV report compiled and downloaded successfully.', 'success');
+  };
+
   const handleExportPdf = () => {
     setIsExporting(true);
     onNotify('Compiling document nodes for PDF generation...', 'info');
@@ -143,14 +213,14 @@ Provide an executive, non-technical security summary and analysis of this statis
   return (
     <div id="report-container" className="flex-1 overflow-y-auto bg-background p-6 md:p-8 space-y-8 select-none">
       {/* Header controls block */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print bg-surface/40 border border-surface dark:border-white/5 p-5 backdrop-blur-md shadow-xl transition-all duration-300">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print bg-surface/40 border border-surface dark:border-white/5 rounded-2xl p-5 backdrop-blur-md shadow-xl transition-all duration-300">
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-1.5">
             <h1 className="text-3xl font-black text-main dark:text-white uppercase tracking-tight">Prevention Analytics</h1>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 border text-[10px] font-bold uppercase tracking-wider ${
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 border text-[10px] font-bold uppercase tracking-wider rounded-lg ${
               isApiKeyConfigured()
-                ? 'bg-emerald-950/30 text-emerald-400 border-emerald-500/30' 
-                : 'bg-red-950/30 text-red-400 border-red-500/30'
+                ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30' 
+                : 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30'
             }`}>
               <span className={`size-1.5 rounded-full ${
                 isApiKeyConfigured()
@@ -163,18 +233,17 @@ Provide an executive, non-technical security summary and analysis of this statis
           <p className="text-muted dark:text-gray-500 font-mono text-[10px] uppercase tracking-[0.2em]">Telemetry Interval: Real-time Simulation Stream</p>
         </div>
         <div className="flex flex-wrap gap-2.5">
-          <a 
-            href={ipsApi.getReportDownloadUrl()}
-            download
-            className="px-4 py-2 bg-surface/60 border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-black dark:hover:border-white text-xs font-bold font-mono transition-all duration-200 flex items-center gap-2 uppercase outline-none hover:shadow-[0_0_10px_rgba(255,255,255,0.05)] cursor-pointer"
+          <button 
+            onClick={handleExportCsv}
+            className="px-4 py-2 bg-surface/60 border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-[#4A6FD4] hover:bg-[#4A6FD4]/5 hover:border-[#4A6FD4] text-xs font-bold font-mono rounded-xl transition-all duration-200 flex items-center gap-2 uppercase outline-none hover:shadow-[0_0_10px_rgba(255,255,255,0.05)] cursor-pointer"
           >
             <span className="material-symbols-outlined text-sm shrink-0">download</span> 
             Export CSV
-          </a>
+          </button>
           <button 
             onClick={handleExportPdf}
             disabled={isExporting}
-            className="px-4 py-2 bg-surface/60 border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-main dark:hover:text-white hover:border-black dark:hover:border-white text-xs font-bold font-mono transition-all duration-200 flex items-center gap-2 uppercase outline-none disabled:opacity-50 hover:shadow-[0_0_10px_rgba(255,255,255,0.05)] cursor-pointer"
+            className="px-4 py-2 bg-surface/60 border border-surface dark:border-surface-highlight text-muted dark:text-gray-400 hover:text-[#4A6FD4] hover:bg-[#4A6FD4]/5 hover:border-[#4A6FD4] text-xs font-bold font-mono rounded-xl transition-all duration-200 flex items-center gap-2 uppercase outline-none disabled:opacity-50 hover:shadow-[0_0_10px_rgba(255,255,255,0.05)] cursor-pointer"
           >
             <span className={`material-symbols-outlined text-sm shrink-0 ${isExporting ? 'animate-pulse' : ''}`}>
               {isExporting ? 'hourglass_top' : 'picture_as_pdf'}
@@ -184,7 +253,7 @@ Provide an executive, non-technical security summary and analysis of this statis
           <button 
             onClick={generateAiReport}
             disabled={isGenerating}
-            className="px-5 py-2 bg-black dark:bg-white text-white dark:text-black text-xs font-black uppercase hover:bg-gray-800 dark:hover:bg-gray-200 transition-all duration-200 flex items-center gap-2 outline-none disabled:bg-gray-800 disabled:text-gray-600 hover:shadow-[0_0_15px_rgba(255,255,255,0.15)] cursor-pointer"
+            className="px-5 py-2 bg-[#4A6FD4] hover:bg-[#3A5ECA] text-white font-black uppercase rounded-lg text-xs transition-all duration-200 flex items-center gap-2 outline-none disabled:bg-gray-800 disabled:text-gray-600 hover:shadow-[0_0_15px_rgba(74,111,212,0.15)] cursor-pointer"
           >
             <span className={`material-symbols-outlined text-sm shrink-0 ${isGenerating ? 'animate-spin' : ''}`}>
               {isGenerating ? 'sync' : 'auto_awesome'}
@@ -210,10 +279,10 @@ Provide an executive, non-technical security summary and analysis of this statis
 
       {/* AI Summary Section with cyberpunk styling */}
       {aiSummary && (
-        <div className="bg-surface/50 dark:bg-surface-dark border border-blue-500/20 p-6 shadow-2xl relative overflow-hidden animate-in fade-in slide-in-from-top-3 duration-500">
-          <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-          <div className="flex items-center gap-2 text-blue-400 font-bold text-xs uppercase mb-3.5 tracking-widest border-b border-surface dark:border-surface-highlight pb-2">
-            <span className="material-symbols-outlined text-[16px] text-blue-400 animate-pulse">auto_awesome</span>
+        <div className="bg-surface/50 dark:bg-surface-dark border border-[#4A6FD4]/20 rounded-2xl p-6 shadow-2xl relative overflow-hidden animate-in fade-in slide-in-from-top-3 duration-500">
+          <div className="absolute top-0 left-0 w-1 h-full bg-[#4A6FD4]"></div>
+          <div className="flex items-center gap-2 text-[#4A6FD4] font-bold text-xs uppercase mb-3.5 tracking-widest border-b border-surface dark:border-surface-highlight pb-2">
+            <span className="material-symbols-outlined text-[16px] text-[#4A6FD4] animate-pulse">auto_awesome</span>
             Groq AI Executive Protection Briefing
           </div>
           <p className="text-main dark:text-gray-300 font-mono text-xs leading-relaxed whitespace-pre-wrap italic pl-3 relative">
@@ -225,44 +294,57 @@ Provide an executive, non-technical security summary and analysis of this statis
       {/* Top row: Velocity trend and Pie Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print-grid-2">
         {/* Weekly Trend Chart */}
-        <div className="bg-surface/50 border border-surface dark:border-white/5 p-6 min-h-[350px] flex flex-col hover:border-blue-500/30 transition-colors duration-300 shadow-md">
+        <div className="bg-surface/50 border border-surface dark:border-white/5 rounded-3xl p-6 min-h-[350px] flex flex-col hover:border-[#4A6FD4]/30 transition-colors duration-300 shadow-md">
           <h3 className="text-main dark:text-white font-bold text-xs uppercase mb-1.5 tracking-widest flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+            <span className="w-1.5 h-1.5 bg-[#4A6FD4] rounded-full"></span>
             Prevention Velocity (Weekly Trend)
           </h3>
           <p className="text-muted dark:text-gray-500 text-[10px] mb-6 uppercase font-mono">Historical normal packet volume vs intercepted threats</p>
           <div className="h-[260px] w-full text-xs chart-print-container">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={REPORT_DATA}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-surface)" opacity={0.4} vertical={false} />
+              <ComposedChart data={REPORT_DATA} margin={{ top: 10, right: -5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorPreventions" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#4A6FD4" stopOpacity={0.35}/>
+                    <stop offset="95%" stopColor="#4A6FD4" stopOpacity={0.0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-surface)" opacity={0.3} vertical={false} />
                 <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={10} axisLine={false} tickLine={false} />
-                <YAxis stroke="var(--text-muted)" fontSize={10} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="left" stroke="#4A6FD4" fontSize={10} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="right" orientation="right" stroke="#FF8A00" fontSize={10} axisLine={false} tickLine={false} domain={[90, 100]} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-surface)', borderRadius: '0', color: 'var(--text-main)', fontFamily: 'monospace', fontSize: '11px' }}
+                  contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-surface)', borderRadius: '8px', color: 'var(--text-main)', fontFamily: 'monospace', fontSize: '11px' }}
                 />
-                <Line type="stepAfter" dataKey="preventions" name="Preventions" stroke="#3b82f6" strokeWidth={3} dot={{ fill: '#3b82f6', r: 4, strokeWidth: 0 }} activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} />
-              </LineChart>
+                <Area yAxisId="left" type="monotone" dataKey="preventions" name="Preventions" stroke="#4A6FD4" strokeWidth={3} fillOpacity={1} fill="url(#colorPreventions)" dot={{ fill: '#4A6FD4', r: 4, strokeWidth: 0 }} activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }} />
+                <Line yAxisId="right" type="monotone" dataKey="performance" name="Performance (%)" stroke="#FF8A00" strokeWidth={2.5} dot={{ fill: '#FF8A00', r: 3 }} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Threat Distribution Chart */}
-        <div className="bg-surface/50 border border-surface dark:border-white/5 p-6 min-h-[350px] flex flex-col hover:border-purple-500/30 transition-colors duration-300 shadow-md">
+        <div className="bg-surface/50 border border-surface dark:border-white/5 rounded-3xl p-6 min-h-[350px] flex flex-col hover:border-[#4A6FD4]/30 transition-colors duration-300 shadow-md">
           <h3 className="text-main dark:text-white font-bold text-xs uppercase mb-1.5 tracking-widest flex items-center gap-2">
             <span className="w-1.5 h-1.5 bg-purple-500 rounded-full"></span>
             Threat Vector Distribution
           </h3>
           <p className="text-muted dark:text-gray-500 text-[10px] mb-6 uppercase font-mono">Actual percentages calculated from active simulation alerts</p>
-          <div className="flex-1 w-full flex flex-col md:flex-row items-center gap-8">
-            <div className="w-full h-48 md:w-1/2 chart-print-container-pie">
+          <div className="flex-grow w-full flex flex-col md:flex-row items-center gap-8">
+            <div className="w-full h-48 md:w-1/2 chart-print-container-pie relative flex items-center justify-center">
+              {/* Centered Total Label inside donut hole */}
+              <div className="absolute flex flex-col items-center justify-center font-mono pointer-events-none select-none">
+                <span className="text-2xl font-black text-main leading-none">{alerts ? alerts.length : 0}</span>
+                <span className="text-[9px] uppercase tracking-wider text-muted font-bold mt-1.5">Alerts</span>
+              </div>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={threatDistribution}
                     cx="50%"
                     cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
+                    innerRadius={52}
+                    outerRadius={72}
                     paddingAngle={4}
                     dataKey="value"
                     stroke="none"
@@ -272,16 +354,16 @@ Provide an executive, non-technical security summary and analysis of this statis
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-surface)', borderRadius: '0', color: 'var(--text-main)', fontFamily: 'monospace', fontSize: '11px' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-surface)', borderRadius: '8px', color: 'var(--text-main)', fontFamily: 'monospace', fontSize: '11px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="w-full md:w-1/2 space-y-3 font-mono">
               {threatDistribution.map((item, idx) => (
-                <div key={item.name} className="flex items-center gap-3 p-2 bg-surface/30 dark:bg-black/20 border border-surface/50 dark:border-white/5 hover:border-white/10 transition-colors">
+                <div key={item.name} className="flex items-center gap-3 p-2 bg-surface/30 dark:bg-black/20 border border-surface/50 dark:border-white/5 hover:border-white/10 rounded-xl transition-colors">
                   <div className="size-2.5 shrink-0" style={{ backgroundColor: COLORS[idx] }}></div>
-                  <div className="flex-1 text-[10px]">
+                  <div className="flex-1 text-xs">
                     <span className="text-main dark:text-white font-bold uppercase block">{item.name}</span>
                     <span className="text-muted dark:text-gray-500">{item.value}% of total alerts</span>
                   </div>
@@ -293,8 +375,8 @@ Provide an executive, non-technical security summary and analysis of this statis
       </div>
 
       {/* Machine Learning Performance Lab Section */}
-      <div className="bg-surface/55 border border-surface dark:border-white/5 p-6 md:p-8 backdrop-blur-md shadow-xl relative">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-blue-500 via-purple-500 to-amber-500"></div>
+      <div className="bg-surface/55 border border-surface dark:border-white/5 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-xl relative">
+        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-[#4A6FD4] via-purple-500 to-amber-500"></div>
         <h3 className="text-main dark:text-white font-bold text-xs uppercase mb-6 tracking-widest flex items-center gap-2">
           <span className="material-symbols-outlined text-[18px] text-blue-400 shrink-0">science</span>
           Machine Learning Evaluation & Model Telemetry
@@ -350,7 +432,7 @@ Provide an executive, non-technical security summary and analysis of this statis
           ].map(card => (
             <div 
               key={card.id} 
-              className={`bg-background/45 border-l-4 ${card.accentColor} border-y border-r border-surface dark:border-white/5 p-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 ${card.borderHover}`}
+              className={`bg-background/45 border-l-4 ${card.accentColor} border-y border-r border-surface dark:border-white/5 rounded-xl p-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 ${card.borderHover}`}
             >
               <div className="flex justify-between items-start mb-2">
                 <span className="text-[10px] font-mono text-muted dark:text-gray-500 uppercase tracking-widest">{card.label}</span>
@@ -369,7 +451,7 @@ Provide an executive, non-technical security summary and analysis of this statis
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch print-grid-2">
           {/* Confusion Matrix Console */}
-          <div className="lg:col-span-5 bg-background/50 border border-surface dark:border-white/5 p-5 flex flex-col justify-between font-mono hover:border-purple-500/20 transition-all duration-300">
+          <div className="lg:col-span-5 bg-background/50 border border-surface dark:border-white/5 rounded-3xl p-5 flex flex-col justify-between font-mono hover:border-[#4A6FD4]/20 transition-all duration-300">
             <div className="text-[10px] text-muted dark:text-gray-400 uppercase font-bold tracking-widest mb-4 flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[16px] text-purple-400 shrink-0">grid_on</span>
               Model Anomaly Matrix (Confusion Matrix)
@@ -381,23 +463,23 @@ Provide an executive, non-technical security summary and analysis of this statis
               <div className="text-center font-bold text-muted dark:text-gray-500 uppercase tracking-wider text-[8px] pb-1 border-b border-surface">Pred Anomaly</div>
 
               <div className="font-bold text-muted dark:text-gray-500 flex items-center uppercase tracking-wider text-[8px] pr-1 border-r border-surface">Actual Normal</div>
-              <div className="bg-emerald-950/20 dark:bg-emerald-950/10 border border-emerald-500/20 p-3 text-center transition-all duration-200 hover:bg-emerald-950/30 hover:border-emerald-500/40">
-                <div className="text-lg font-black text-emerald-500">{metrics?.confusion_matrix?.tn ?? 282}</div>
-                <div className="text-[7px] text-muted dark:text-gray-400 uppercase font-mono mt-1">True Neg (TN)</div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/10 border border-emerald-200 dark:border-emerald-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-emerald-100 dark:hover:bg-emerald-950/20">
+                <div className="text-lg font-black text-emerald-800 dark:text-emerald-500">{metrics?.confusion_matrix?.tn ?? 282}</div>
+                <div className="text-[7px] text-gray-500 dark:text-muted uppercase font-mono mt-1">True Neg (TN)</div>
               </div>
-              <div className="bg-red-950/20 dark:bg-red-950/10 border border-red-500/20 p-3 text-center transition-all duration-200 hover:bg-red-950/30 hover:border-red-500/40">
-                <div className="text-lg font-black text-red-400">{metrics?.confusion_matrix?.fp ?? 11}</div>
-                <div className="text-[7px] text-muted dark:text-gray-400 uppercase font-mono mt-1">False Pos (FP)</div>
+              <div className="bg-red-50 dark:bg-red-950/10 border border-red-200 dark:border-red-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-950/20">
+                <div className="text-lg font-black text-red-800 dark:text-red-400">{metrics?.confusion_matrix?.fp ?? 11}</div>
+                <div className="text-[7px] text-gray-500 dark:text-muted uppercase font-mono mt-1">False Pos (FP)</div>
               </div>
 
               <div className="font-bold text-muted dark:text-gray-500 flex items-center uppercase tracking-wider text-[8px] pr-1 border-r border-surface">Actual Anomaly</div>
-              <div className="bg-red-950/20 dark:bg-red-950/10 border border-red-500/20 p-3 text-center transition-all duration-200 hover:bg-red-950/30 hover:border-red-500/40">
-                <div className="text-lg font-black text-red-400">{metrics?.confusion_matrix?.fn ?? 16}</div>
-                <div className="text-[7px] text-muted dark:text-gray-400 uppercase font-mono mt-1">False Neg (FN)</div>
+              <div className="bg-red-50 dark:bg-red-950/10 border border-red-200 dark:border-red-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-red-100 dark:hover:bg-red-950/20">
+                <div className="text-lg font-black text-red-800 dark:text-red-400">{metrics?.confusion_matrix?.fn ?? 16}</div>
+                <div className="text-[7px] text-gray-500 dark:text-muted uppercase font-mono mt-1">False Neg (FN)</div>
               </div>
-              <div className="bg-emerald-950/20 dark:bg-emerald-950/10 border border-emerald-500/20 p-3 text-center transition-all duration-200 hover:bg-emerald-950/30 hover:border-emerald-500/40">
-                <div className="text-lg font-black text-emerald-500">{metrics?.confusion_matrix?.tp ?? 138}</div>
-                <div className="text-[7px] text-muted dark:text-gray-400 uppercase font-mono mt-1">True Pos (TP)</div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/10 border border-emerald-200 dark:border-emerald-900/30 rounded-xl p-3 text-center transition-all duration-200 hover:bg-emerald-100 dark:hover:bg-emerald-950/20">
+                <div className="text-lg font-black text-emerald-800 dark:text-emerald-500">{metrics?.confusion_matrix?.tp ?? 138}</div>
+                <div className="text-[7px] text-gray-500 dark:text-muted uppercase font-mono mt-1">True Pos (TP)</div>
               </div>
             </div>
             
@@ -407,7 +489,7 @@ Provide an executive, non-technical security summary and analysis of this statis
           </div>
 
           {/* ROC-AUC Chart Card */}
-          <div className="lg:col-span-7 bg-background/50 border border-surface dark:border-white/5 p-5 flex flex-col justify-between hover:border-blue-500/20 transition-all duration-300">
+          <div className="lg:col-span-7 bg-background/50 border border-surface dark:border-white/5 rounded-3xl p-5 flex flex-col justify-between hover:border-[#4A6FD4]/20 transition-all duration-300">
             <div className="text-[10px] text-muted dark:text-gray-400 uppercase font-bold tracking-widest mb-4 flex items-center gap-1.5 font-mono">
               <span className="material-symbols-outlined text-[16px] text-amber-400 shrink-0">show_chart</span>
               ROC-AUC Analysis (Detection Curve)
@@ -415,17 +497,23 @@ Provide an executive, non-technical security summary and analysis of this statis
             
             <div className="h-44 w-full text-xs chart-print-container-roc">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={rocData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis dataKey="fpr" type="number" domain={[0, 1.0]} stroke="#555" fontSize={8} />
-                  <YAxis type="number" domain={[0, 1.0]} stroke="#555" fontSize={8} />
+                <ComposedChart data={rocData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="colorRoc" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#4A6FD4" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#4A6FD4" stopOpacity={0.0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-surface)" opacity={0.3} />
+                  <XAxis dataKey="fpr" type="number" domain={[0, 1.0]} stroke="var(--text-muted)" fontSize={8} tickLine={false} />
+                  <YAxis type="number" domain={[0, 1.0]} stroke="var(--text-muted)" fontSize={8} tickLine={false} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#000', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'monospace', fontSize: '9px', color: '#fff' }}
-                    labelFormatter={(v) => `FPR: ${v}`}
+                    contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-surface)', borderRadius: '8px', color: 'var(--text-main)', fontFamily: 'monospace', fontSize: '9px' }}
+                    labelFormatter={(v) => `False Pos Rate: ${v}`}
                   />
-                  <Line type="monotone" dataKey="tpr" name="Isolation Forest" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 2 }} activeDot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="baseline" name="Baseline" stroke="#555" strokeDasharray="4 4" dot={false} strokeWidth={1} />
-                </LineChart>
+                  <Area type="monotone" dataKey="tpr" name="True Pos Rate" stroke="#4A6FD4" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRoc)" dot={{ fill: '#4A6FD4', r: 1 }} activeDot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="baseline" name="Random Guess" stroke="var(--text-muted)" strokeDasharray="4 4" dot={false} strokeWidth={1} />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
             
@@ -438,7 +526,7 @@ Provide an executive, non-technical security summary and analysis of this statis
       </div>
 
       {/* Active System Metrics Section */}
-      <div className="bg-surface/50 border border-surface dark:border-white/5 p-6 hover:border-emerald-500/20 transition-all duration-300">
+      <div className="bg-surface/50 border border-surface dark:border-white/5 rounded-3xl p-6 hover:border-emerald-500/20 transition-all duration-300">
         <h3 className="text-main dark:text-white font-bold text-xs uppercase mb-6 tracking-widest flex items-center gap-2">
           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
           Active Intrusion Prevention Metrics
@@ -462,7 +550,7 @@ Provide an executive, non-technical security summary and analysis of this statis
               icon: 'sentiment_satisfied'
             },
           ].map(m => (
-            <div key={m.label} className="p-4 border border-surface dark:border-white/5 bg-background/40 hover:border-white/10 hover:shadow-[0_0_10px_rgba(255,255,255,0.02)] transition-all duration-300 flex flex-col justify-between h-28">
+            <div key={m.label} className="p-4 border border-surface dark:border-white/5 bg-background/40 hover:border-white/10 hover:shadow-[0_0_10px_rgba(255,255,255,0.02)] transition-all duration-300 rounded-2xl flex flex-col justify-between h-28">
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-[8px] text-muted dark:text-gray-500 font-bold uppercase tracking-wider block truncate max-w-[85%]">{m.label}</span>
@@ -473,11 +561,11 @@ Provide an executive, non-technical security summary and analysis of this statis
                 </div>
               </div>
               <div className="mt-2.5">
-                <div className={`text-[8px] font-bold px-2 py-0.5 font-mono inline-block tracking-wider ${
-                  m.status === 'NOMINAL' ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20' : 
-                  m.status === 'WARNING' ? 'bg-orange-950/40 text-orange-400 border border-orange-500/20' : 
-                  m.status === 'ISOLATED' ? 'bg-yellow-950/40 text-yellow-400 border border-yellow-500/20' : 
-                  'bg-red-950/40 text-red-400 border border-red-500/20'
+                <div className={`text-[8px] font-bold px-2 py-0.5 font-mono inline-block tracking-wider rounded border ${
+                  m.status === 'NOMINAL' ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30' : 
+                  m.status === 'WARNING' ? 'bg-orange-50 dark:bg-orange-950/20 text-orange-850 dark:text-orange-400 border-orange-200 dark:border-orange-900/30 animate-pulse' : 
+                  m.status === 'ISOLATED' ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-400 border-amber-200 dark:border-amber-900/30' : 
+                  'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30'
                 }`}>
                   {m.status}
                 </div>
@@ -488,16 +576,16 @@ Provide an executive, non-technical security summary and analysis of this statis
       </div>
 
       {/* Telemetry Run Archive Log */}
-      <div className="bg-surface/50 border border-surface dark:border-white/5 p-6 mt-6 hover:border-blue-500/20 transition-all duration-300">
+      <div className="bg-surface/50 border border-surface dark:border-white/5 rounded-3xl p-6 mt-6 hover:border-[#4A6FD4]/20 transition-all duration-300">
         <h3 className="text-main dark:text-white font-bold text-xs uppercase mb-4 tracking-widest flex items-center gap-2">
           <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse shadow-[0_0_6px_#3b82f6]"></span>
           IPS Simulation Runs Archive
         </h3>
-        <p className="text-muted dark:text-gray-400 text-[10px] uppercase font-mono tracking-wide mb-4">
+        <p className="text-muted dark:text-gray-400 text-xs uppercase font-mono tracking-wide mb-4">
           Historical log of automated mitigation sequences executed by the intrusion prevention system.
         </p>
-        <div className="overflow-x-auto border border-surface dark:border-white/5 font-mono">
-          <table className="w-full text-left border-collapse text-[10px] select-text">
+        <div className="overflow-x-auto border border-surface dark:border-white/5 rounded-2xl overflow-hidden font-mono">
+          <table className="w-full text-left border-collapse text-xs select-text">
             <thead>
               <tr className="bg-surface/75 dark:bg-black/40 border-b border-surface text-muted dark:text-gray-400">
                 <th className="p-3 font-bold uppercase tracking-wider">Run ID</th>
@@ -523,15 +611,15 @@ Provide an executive, non-technical security summary and analysis of this statis
                   <td className="p-3 text-main dark:text-white font-bold">{run.scenario}</td>
                   <td className="p-3 text-muted dark:text-gray-400">{run.target}</td>
                   <td className="p-3 text-muted dark:text-gray-400">
-                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 border text-[8px] font-bold ${
-                      run.detector.includes('ML') ? 'bg-blue-950/40 text-blue-400 border-blue-500/20' : 'bg-surface dark:bg-[#222] text-gray-400 border-surface'
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 border text-[8px] font-bold rounded ${
+                      run.detector.includes('ML') ? 'bg-blue-50 dark:bg-blue-950/20 text-blue-800 dark:text-blue-400 border-blue-200 dark:border-blue-900/30' : 'bg-gray-50 dark:bg-neutral-900 text-gray-700 dark:text-gray-400 border-gray-200 dark:border-neutral-800'
                     }`}>
                       {run.detector}
                     </span>
                   </td>
                   <td className="p-3 font-bold text-emerald-400">{run.delay}</td>
                   <td className="p-3">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border text-[8px] font-bold bg-emerald-950/40 text-emerald-400 border-emerald-500/20 uppercase">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border text-[8px] font-bold bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30 uppercase rounded">
                       ● {run.status}
                     </span>
                   </td>

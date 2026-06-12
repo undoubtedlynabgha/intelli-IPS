@@ -65,7 +65,7 @@ const Copilot: React.FC<CopilotProps> = ({
     }
 
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const userMessage: Message = { sender: 'user', text: textToSend, timestamp };
+    const userMessage: CopilotMessage = { sender: 'user', text: textToSend, timestamp };
     
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
@@ -302,10 +302,10 @@ Your response guidelines:
           <span className="text-muted dark:text-gray-400">Llama-3.3-70b Core</span>
         </div>
         <div>
-          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-bold uppercase ${
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 border text-[10px] font-bold uppercase rounded-lg ${
             isApiKeyConfigured()
-              ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/50' 
-              : 'bg-red-950/60 text-red-400 border-red-500/50'
+              ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30' 
+              : 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30'
           }`}>
             <span className={`size-1.5 rounded-full ${
               isApiKeyConfigured()
@@ -340,8 +340,8 @@ Your response guidelines:
                 </div>
                 <div className={`p-4 border leading-relaxed break-words shadow-lg ${
                   msg.sender === 'user'
-                    ? 'bg-surface dark:bg-surface-dark border-surface-highlight dark:border-surface-highlight text-main dark:text-white'
-                    : 'bg-blue-950/10 dark:bg-blue-950/5 border-blue-900/30 text-main dark:text-gray-300'
+                    ? 'bg-surface dark:bg-surface-dark border-surface-highlight dark:border-surface-highlight text-main dark:text-white rounded-2xl rounded-tr-none'
+                    : 'bg-primary/5 dark:bg-primary/10 border-primary/20 dark:border-primary/20 text-main dark:text-gray-200 rounded-2xl rounded-tl-none'
                 }`}>
                   {renderMessageText(msg.text)}
                 </div>
@@ -372,7 +372,7 @@ Your response guidelines:
                 key={pIdx}
                 disabled={isLoading}
                 onClick={() => handleSendMessage(prompt.text)}
-                className="text-[10px] font-mono border border-surface dark:border-surface-highlight px-3.5 py-1.5 bg-background dark:bg-black hover:border-blue-500/50 hover:text-blue-400 rounded-full transition-all duration-200 uppercase outline-none disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 hover:bg-blue-500/5 dark:hover:bg-blue-500/5"
+                className="text-[10px] font-mono border border-surface dark:border-surface-highlight px-3.5 py-1.5 bg-background dark:bg-black hover:border-[#4A6FD4] hover:text-[#4A6FD4] rounded-full transition-all duration-200 uppercase outline-none disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 hover:bg-[#4A6FD4]/5 dark:hover:bg-[#4A6FD4]/5 shadow-sm"
               >
                 <span className="material-symbols-outlined text-[13px] text-blue-400 shrink-0">help</span>
                 {prompt.label}
@@ -390,13 +390,13 @@ Your response guidelines:
               disabled={isLoading}
               placeholder={isApiKeyConfigured() ? "Ask the security copilot... (e.g. why LOCK_EXT_01 is blocked)" : "API Key Required — configure GROQ_API_KEY in .env.local"}
               className={`flex-grow h-10 px-4 bg-surface dark:bg-surface-dark border ${
-                isApiKeyConfigured() ? 'border-surface dark:border-surface-highlight focus:border-black dark:focus:border-white' : 'border-red-900/50 bg-red-950/5 cursor-not-allowed'
+                isApiKeyConfigured() ? 'border-surface dark:border-surface-highlight focus:border-[#4A6FD4] dark:focus:border-[#4A6FD4] rounded-xl' : 'border-red-900/50 bg-red-950/5 cursor-not-allowed rounded-xl'
               } text-main dark:text-white text-xs sm:text-sm placeholder-gray-500 outline-none transition-all font-mono`}
             />
             <button
               onClick={() => handleSendMessage(inputText)}
               disabled={isLoading || !inputText.trim() || !isApiKeyConfigured()}
-              className="h-10 px-5 bg-black dark:bg-white text-white dark:text-black font-black uppercase text-xs hover:bg-gray-800 dark:hover:bg-gray-200 transition-all flex items-center justify-center gap-2 outline-none disabled:bg-surface disabled:border-surface disabled:text-gray-500 cursor-pointer tracking-wider"
+              className="h-10 px-5 bg-[#4A6FD4] hover:bg-[#3A5ECA] text-white font-black uppercase text-xs transition-all flex items-center justify-center gap-2 outline-none rounded-xl disabled:bg-surface disabled:border-surface disabled:text-gray-500 cursor-pointer tracking-wider"
             >
               <span className="material-symbols-outlined text-[16px]">send</span>
               <span className="hidden sm:inline">Send</span>
@@ -415,7 +415,7 @@ Your response guidelines:
           <div className="flex-1 overflow-y-auto p-4 space-y-4 text-[10px]">
             
             {/* Live stats summary */}
-            <div className="space-y-1.5 border border-surface dark:border-surface-highlight p-3 bg-surface/20 dark:bg-surface-dark/20">
+            <div className="space-y-1.5 border border-surface dark:border-surface-highlight p-3 bg-surface/20 dark:bg-surface-dark/20 rounded-2xl">
               <div className="font-bold text-main dark:text-white uppercase mb-1 flex items-center gap-1.5 text-[9px]">
                 <span className="size-1.5 rounded-full bg-blue-500 animate-pulse"></span>
                 <span>Active Snapshot</span>
@@ -431,16 +431,16 @@ Your response guidelines:
               <div className="font-bold text-main dark:text-white uppercase text-[9px] tracking-widest text-muted dark:text-gray-500">Device Directory ({devices.length})</div>
               <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
                 {devices.map(d => (
-                  <div key={d.id} className="p-2 border border-surface dark:border-surface-highlight bg-surface/10 dark:bg-surface-dark/10 flex justify-between items-center">
+                  <div key={d.id} className="p-2 border border-surface dark:border-surface-highlight bg-surface/10 dark:bg-surface-dark/10 flex justify-between items-center rounded-2xl">
                     <div>
                       <span className="font-bold text-main dark:text-white block truncate w-36">{d.name}</span>
                       <span className="text-[8px] text-muted dark:text-gray-600 block">{d.id} · {d.type}</span>
                     </div>
                     <div>
-                      <span className={`px-1.5 py-0.5 border text-[8px] font-bold uppercase ${
-                        d.status === 'blocked' ? 'bg-red-950/60 text-red-400 border-red-900/30' :
-                        d.status === 'threat' ? 'bg-orange-950/60 text-orange-400 border-orange-900/30 animate-pulse' :
-                        'bg-emerald-950/60 text-emerald-400 border-emerald-900/30'
+                      <span className={`px-1.5 py-0.5 border text-[8px] font-bold uppercase rounded-md ${
+                        d.status === 'blocked' ? 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400 border-red-200 dark:border-red-900/30' :
+                        d.status === 'threat' ? 'bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-400 border-orange-200 dark:border-orange-900/30 animate-pulse' :
+                        'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30'
                       }`}>
                         {d.status === 'blocked' ? 'Prevented' : d.status === 'threat' ? 'Threat' : 'Online'}
                       </span>
@@ -460,7 +460,7 @@ Your response guidelines:
                   </div>
                 ) : (
                   alerts.slice(0, 5).map(a => (
-                    <div key={a.id} className="p-2 border border-red-900/20 bg-red-950/5 space-y-1">
+                    <div key={a.id} className="p-2 border border-red-900/20 bg-red-950/5 space-y-1 rounded-2xl">
                       <div className="flex justify-between font-bold text-red-400">
                         <span>{a.threat}</span>
                         <span className="text-[8px]">{a.timestamp}</span>
